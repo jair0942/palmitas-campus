@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/require-auth";
 import { prisma } from "@/lib/prisma";
-import { StorageProvider } from "@prisma/client";
+import { StorageProvider } from "../../../generated/prisma/client";
 import storage from "@/lib/storage";
 import { validateSession } from "@/lib/auth";
 import { v4 as uuidv4 } from "uuid";
