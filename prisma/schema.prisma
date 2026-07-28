@@ -1,0 +1,654 @@
+// ============================================================
+// Palmitas Campus — Schema Prisma Completo
+// Modelo Entidad-Relación completo del sistema académico
+// Versión: 2.0 — Todas las entidades definidas
+// ============================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum EnrollmentStatus {
+  ACTIVE
+  WITHDRAWN
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+  R2
+  EXTERNAL
+}
+
+enum NotificationType {
+  NEW_ASSIGNMENT
+  NEW_POST
+  COMMENT
+  GRADE
+  SUBMISSION
+  NEW_USER
+  NEW_CLASS
+  CORRECTIONS_REQUESTED
+  RESUBMISSION
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+// ============================================================
+// USER
+// Representa cualquier persona en el sistema (admin, teacher, student)
+// Login oficial: username + passwordHash
+// ============================================================
+
+model User {
+  id                String   @id @default(cuid())
+  username          String   @unique
+  passwordHash      String
+  documentType      String   @default("")
+  documentNumber    String   @default("")
+  firstName         String   @default("")
+  lastName          String   @default("")
+  phone             String?
+  email             String?
+  roleId            String
+  avatar            String   @default("")
+  active            Boolean  @default(true)
+  blocked           Boolean  @default(false)
+  mustChangePassword Boolean @default(false)
+  lastLoginAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  role                Role                  @relation(fields: [roleId], references: [id])
+  managedGroups         AcademicGroup[]       @relation("AcademicGroupManager")
+  teachingAssignments   TeachingAssignment[]  @relation("TeachingAssignmentTeacher")
+  enrollments           Enrollment[]          @relation("EnrollmentStudent")
+  posts                 Post[]                @relation("PostAuthor")
+  comments              Comment[]             @relation("CommentAuthor")
+  uploadedFiles          FileAsset[]           @relation("FileAssetUploader")
+  submissions           Submission[]          @relation("SubmissionStudent")
+  correctionRequests    CorrectionRequest[]   @relation("CorrectionRequestTeacher")
+  gradesGiven           Grade[]               @relation("GradeGrader")
+  sessions              Session[]             @relation("UserSessions")
+  notifications         Notification[]         @relation("UserNotifications")
+  auditLogs             AuditLog[]              @relation("UserAuditLogs")
+
+  @@index([roleId])
+  @@map("users")
+}
+
+// ============================================================
+// ROLE
+// Roles del sistema (admin, teacher, student)
+// ============================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("roles")
+}
+
+// ============================================================
+// PERMISSION
+// Permisos individuales del sistema
+// ============================================================
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+
+  roles RolePermission[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("permissions")
+}
+
+// ============================================================
+// ROLE PERMISSION (join table)
+// Asignación de permisos a roles
+// ============================================================
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// SESSION
+// Sesiones activas de usuarios
+// ============================================================
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  ip        String?
+  userAgent String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([active])
+  @@map("sessions")
+}
+
+// ============================================================
+// SEMESTER
+// Período académico (ej. 2026-I, 2026-II)
+// ============================================================
+
+model Semester {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(false)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  academicGroups    AcademicGroup[]
+  enrollments       Enrollment[]
+  activeForSettings InstitutionSettings? @relation("ActiveSemester")
+
+  @@index([active])
+  @@map("semesters")
+}
+
+// ============================================================
+// CYCLE
+// Ciclo académico (C2, C3, C4, C5, C6)
+// Ciclo 2 NO usa materias (usesSubjects = false)
+// ============================================================
+
+model Cycle {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  description  String   @default("")
+  order        Int      @unique
+  usesSubjects Boolean  @default(true)
+  active       Boolean  @default(true)
+
+  academicGroups       AcademicGroup[]
+  teachingAssignments  TeachingAssignment[]
+
+  @@index([active])
+  @@map("cycles")
+}
+
+// ============================================================
+// SUBJECT
+// Materia académica (Matemáticas, Lenguaje, etc.)
+// ============================================================
+
+model Subject {
+  id     String  @id @default(cuid())
+  name   String
+  code   String  @unique
+  color  String  @default("#0F6A3B")
+  icon   String  @default("book-open")
+  active Boolean @default(true)
+
+  teachingAssignments TeachingAssignment[]
+  classes             Class[]
+
+  @@index([active])
+  @@map("subjects")
+}
+
+// ============================================================
+// ACADEMIC GROUP
+// Grupo de estudiantes (NO reemplaza a Class)
+// Un AcademicGroup tiene muchas Classes
+// Una Class pertenece a un solo AcademicGroup
+// ============================================================
+
+model AcademicGroup {
+  id                String   @id @default(cuid())
+  semesterId        String
+  cycleId           String
+  managerTeacherId  String?
+  nameInternal      String
+  nameForStudents   String
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  semester         Semester            @relation(fields: [semesterId], references: [id])
+  cycle            Cycle               @relation(fields: [cycleId], references: [id])
+  managerTeacher   User?               @relation("AcademicGroupManager", fields: [managerTeacherId], references: [id])
+  teachingAssignments TeachingAssignment[]
+  enrollments      Enrollment[]
+  classes          Class[]
+
+  @@index([semesterId])
+  @@index([cycleId])
+  @@index([managerTeacherId])
+  @@map("academic_groups")
+}
+
+// ============================================================
+// TEACHING ASSIGNMENT
+// Asignación de un profesor a un ciclo (y opcionalmente materia/grupo)
+// Única fuente de verdad para la relación Class → Teacher
+// ============================================================
+
+model TeachingAssignment {
+  id               String   @id @default(cuid())
+  teacherId        String
+  cycleId          String
+  subjectId        String?
+  academicGroupId  String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  teacher         User            @relation("TeachingAssignmentTeacher", fields: [teacherId], references: [id])
+  cycle           Cycle           @relation(fields: [cycleId], references: [id])
+  subject         Subject?        @relation(fields: [subjectId], references: [id])
+  academicGroup   AcademicGroup?  @relation(fields: [academicGroupId], references: [id])
+  classes         Class[]
+
+  @@unique([teacherId, cycleId, subjectId, academicGroupId])
+  @@index([teacherId])
+  @@index([cycleId])
+  @@index([subjectId])
+  @@index([academicGroupId])
+  @@map("teaching_assignments")
+}
+
+// ============================================================
+// ENROLLMENT
+// Matrícula de un estudiante en un grupo académico durante un semestre
+// ============================================================
+
+model Enrollment {
+  id                String           @id @default(cuid())
+  studentId         String
+  semesterId        String
+  academicGroupId   String
+  enrolledAt        DateTime         @default(now())
+  status            EnrollmentStatus @default(ACTIVE)
+  withdrawnAt       DateTime?
+
+  student        User           @relation("EnrollmentStudent", fields: [studentId], references: [id])
+  semester       Semester       @relation(fields: [semesterId], references: [id])
+  academicGroup  AcademicGroup  @relation(fields: [academicGroupId], references: [id])
+
+  @@unique([studentId, semesterId])
+  @@index([studentId])
+  @@index([semesterId])
+  @@index([academicGroupId])
+  @@index([status])
+  @@map("enrollments")
+}
+
+// ============================================================
+// CLASS
+// Espacio virtual donde ocurre el aprendizaje
+// Pertenece a un AcademicGroup y a una TeachingAssignment
+// NO depende directamente de un teacherId — usa TeachingAssignment
+// ============================================================
+
+model Class {
+  id                    String   @id @default(cuid())
+  teachingAssignmentId  String
+  academicGroupId       String
+  subjectId             String?
+  name                  String
+  section               String   @default("")
+  description           String   @default("")
+  createdAt             DateTime @default(now())
+
+  teachingAssignment TeachingAssignment @relation(fields: [teachingAssignmentId], references: [id])
+  academicGroup      AcademicGroup       @relation(fields: [academicGroupId], references: [id])
+  subject            Subject?            @relation(fields: [subjectId], references: [id])
+  posts              Post[]
+  assignments        Assignment[]
+
+  @@index([teachingAssignmentId])
+  @@index([academicGroupId])
+  @@index([subjectId])
+  @@map("classes")
+}
+
+// ============================================================
+// POST
+// Publicación realizada por un profesor en una clase
+// ============================================================
+
+model Post {
+  id        String   @id @default(cuid())
+  classId   String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  class       Class        @relation(fields: [classId], references: [id])
+  author      User         @relation("PostAuthor", fields: [authorId], references: [id])
+  comments    Comment[]    @relation("PostComments")
+  attachments Attachment[] @relation("PostAttachments")
+
+  @@index([classId])
+  @@index([authorId])
+  @@map("posts")
+}
+
+// ============================================================
+// COMMENT
+// Comentario para Posts (FASE 4.4) o Submissions (FASE 4.5)
+
+model Comment {
+  id           String   @id @default(cuid())
+  authorId     String
+  content      String
+  postId       String?
+  submissionId String?
+  createdAt    DateTime @default(now())
+
+  author User? @relation("CommentAuthor", fields: [authorId], references: [id])
+  post   Post? @relation("PostComments", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([postId])
+  @@index([submissionId])
+  @@map("comments")
+}
+
+// ============================================================
+// ATTACHMENT
+// Archivo adjunto a un Post, Assignment o SubmissionVersion
+
+model Attachment {
+  id           String   @id @default(cuid())
+  name         String
+  size         String
+  type         String
+  url          String
+  fileAssetId  String?
+  postId       String?
+  assignmentId String?
+  versionId    String?
+  createdAt    DateTime @default(now())
+
+  fileAsset FileAsset?            @relation(fields: [fileAssetId], references: [id])
+  post      Post?                 @relation("PostAttachments", fields: [postId], references: [id], onDelete: Cascade)
+  assignment Assignment?          @relation("AssignmentAttachments", fields: [assignmentId], references: [id], onDelete: Cascade)
+  version   SubmissionVersion?    @relation("VersionAttachments", fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([fileAssetId])
+  @@index([postId])
+  @@index([assignmentId])
+  @@index([versionId])
+  @@map("attachments")
+}
+
+// ============================================================
+// FILE ASSET
+// Archivo almacenado físicamente (local, S3, R2, etc.)
+// ============================================================
+
+model FileAsset {
+  id              String          @id @default(cuid())
+  uploadedById    String?
+  originalName    String
+  storedName      String
+  url             String
+  storageProvider StorageProvider @default(LOCAL)
+  checksum        String?
+  mimeType        String
+  extension       String
+  sizeBytes       Int
+  createdAt       DateTime        @default(now())
+
+  uploader    User?               @relation("FileAssetUploader", fields: [uploadedById], references: [id])
+  attachments Attachment[]
+
+  @@index([uploadedById])
+  @@index([storageProvider])
+  @@map("file_assets")
+}
+
+// ============================================================
+// ASSIGNMENT
+// Tarea asignada a una clase
+// ============================================================
+
+model Assignment {
+  id          String   @id @default(cuid())
+  classId     String
+  title       String
+  description String
+  points      Int
+  dueDate     DateTime
+  publishAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  class        Class             @relation(fields: [classId], references: [id])
+  submissions  Submission[]
+  attachments  Attachment[] @relation("AssignmentAttachments")
+
+  @@index([classId])
+  @@index([dueDate])
+  @@map("assignments")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum VersionStatus {
+  SUBMITTED
+  CORRECTION_REQUESTED
+  GRADED
+}
+
+// ============================================================
+// SUBMISSION
+// Una entrega por estudiante por tarea
+// Las versiones se almacenan en SubmissionVersion
+// ============================================================
+
+model Submission {
+  id            String   @id @default(cuid())
+  assignmentId  String
+  studentId     String
+  createdAt     DateTime @default(now())
+
+  assignment Assignment            @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User                  @relation("SubmissionStudent", fields: [studentId], references: [id])
+  versions   SubmissionVersion[]
+  correctionRequests CorrectionRequest[]
+  grade      Grade?
+
+  @@unique([assignmentId, studentId])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@map("submissions")
+}
+
+// ============================================================
+// SUBMISSION VERSION
+// Cada nueva entrega genera una version
+// Nunca sobrescribir versiones anteriores
+// ============================================================
+
+model SubmissionVersion {
+  id            String        @id @default(cuid())
+  submissionId  String
+  versionNumber Int
+  content       String
+  status        VersionStatus @default(SUBMITTED)
+  submittedAt   DateTime      @default(now())
+
+  submission   Submission         @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  attachments  Attachment[]       @relation("VersionAttachments")
+
+  @@unique([submissionId, versionNumber])
+  @@index([submissionId])
+  @@map("submission_versions")
+}
+
+// ============================================================
+// CORRECTION REQUEST
+// El profesor solicita correcciones sobre una version
+// Si esta abierta, el estudiante puede crear una nueva version
+// Al crear nueva version, se cierra automaticamente
+// ============================================================
+
+model CorrectionRequest {
+  id           String    @id @default(cuid())
+  submissionId String
+  versionId    String
+  teacherId    String
+  observations String
+  status       String    @default("open")
+  createdAt    DateTime  @default(now())
+  closedAt     DateTime?
+
+  submission Submission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  teacher    User              @relation("CorrectionRequestTeacher", fields: [teacherId], references: [id])
+
+  @@index([submissionId])
+  @@index([status])
+  @@map("correction_requests")
+}
+
+// ============================================================
+// GRADE
+// Una unica calificacion por Submission
+// Apunta a la version que fue calificada
+// ============================================================
+
+model Grade {
+  id            String   @id @default(cuid())
+  submissionId  String   @unique
+  score         Float
+  feedback      String   @default("")
+  gradedVersion Int
+  gradedAt      DateTime @default(now())
+  gradedBy      String
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  grader     User       @relation("GradeGrader", fields: [gradedBy], references: [id])
+
+  @@index([submissionId])
+  @@map("grades")
+}
+
+// ============================================================
+// NOTIFICATION
+// Notificación dirigida a un usuario
+// ============================================================
+
+model Notification {
+  id            String           @id @default(cuid())
+  userId        String
+  type          NotificationType
+  title         String
+  message       String
+  classId       String?
+  relatedId     String?
+  relatedEntity String?
+  isRead        Boolean          @default(false)
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
+
+  user User? @relation("UserNotifications", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ============================================================
+// INSTITUTION SETTINGS
+// Configuración global de la institución (singleton — una sola fila)
+// ============================================================
+
+model InstitutionSettings {
+  id                String   @id @default(cuid())
+  schoolName        String
+  logoFileId        String?  @unique
+  shieldFileId      String?  @unique
+  faviconFileId     String?  @unique
+  logoUrl           String?
+  shieldUrl         String?
+  faviconUrl        String?
+  motto             String   @default("")
+  activeSemesterId  String?  @unique
+  primaryColor      String   @default("#0F6A3B")
+  secondaryColor    String   @default("#F2C230")
+  accentColor       String?
+  theme             Theme    @default(LIGHT)
+  address           String?
+  phone             String?
+  institutionalEmail String?
+  extraSettings     Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  activeSemester Semester?  @relation("ActiveSemester", fields: [activeSemesterId], references: [id])
+
+  @@map("institution_settings")
+}
+
+// ============================================================
+// AUDIT LOG
+// Registro de auditoría para todas las acciones importantes
+// ============================================================
+
+model AuditLog {
+  id              String     @id @default(cuid())
+  userId          String?
+  action          String
+  module          String
+  tableName       String?
+  recordId        String?
+  ip              String?
+  browser         String?
+  operatingSystem String?
+  result          String     @default("success")
+  metadata        Json?
+  createdAt       DateTime   @default(now())
+
+  user User? @relation("UserAuditLogs", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
