@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireCampusScope, writeCampusError } from "@/lib/campus-scope";
+import { enrollmentReadWhere } from "@/lib/enrollment-scope";
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireCampusScope(request);
+    if (auth.error) return auth.error;
+
+    const { id } = await params;
+    const existing = await prisma.enrollment.findFirst({
+      where: { id, ...enrollmentReadWhere(auth.scope!) } as never,
+      include: { student: true, semester: true, academicGroup: true },
+    });
+    if (!existing) return NextResponse.json({ error: "Enrollment not found" }, { status: 404 });
+
+    return NextResponse.json(existing);
+  } catch {
+    return NextResponse.json({ error: "Failed to read enrollment" }, { status: 500 });
+  }
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope, writeCampusError } from "@/lib/campus-scope";
+import { enrollmentReadWhere } from "@/lib/enrollment-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -9,20 +10,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const semesterId = searchParams.get("semesterId");
 
-    const where: Record<string, unknown> = {};
-    if (auth.scope!.campusId) {
-      where.academicGroup = { campusId: auth.scope!.campusId };
-    }
-    if (semesterId) {
-      where.semesterId = semesterId;
-      if (auth.scope!.campusId) {
-        where.AND = [{ academicGroup: { campusId: auth.scope!.campusId } }, { semesterId }];
-        delete where.semesterId;
-      }
-    }
+    const where: Record<string, unknown> = enrollmentReadWhere(auth.scope!);
+    if (semesterId) where.semesterId = semesterId;
 
     const enrollments = await prisma.enrollment.findMany({
-      where,
+      where: where as never,
       include: { student: true, semester: true, academicGroup: true },
       orderBy: { enrolledAt: "desc" },
     });
@@ -62,6 +54,20 @@ export async function POST(request: NextRequest) {
 
     if (group.semesterId !== body.semesterId) {
       return NextResponse.json({ error: "Group does not belong to the selected semester" }, { status: 400 });
+    }
+
+    if (auth.scope!.role === "teacher") {
+      const teachesGroup =
+        group.managerTeacherId === auth.scope!.userId ||
+        (await prisma.class.count({
+          where: { academicGroupId: group.id, teachingAssignment: { teacherId: auth.scope!.userId } },
+        })) > 0 ||
+        (await prisma.teachingAssignment.count({
+          where: { academicGroupId: group.id, teacherId: auth.scope!.userId },
+        })) > 0;
+      if (!teachesGroup) {
+        return NextResponse.json({ error: "No tienes acceso a este grupo" }, { status: 403 });
+      }
     }
 
     const existing = await prisma.enrollment.findUnique({
