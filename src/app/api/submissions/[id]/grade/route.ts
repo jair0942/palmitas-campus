@@ -1,51 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
+
+function submissionScopeFilter(campusId: string | null) {
+  if (!campusId) return {};
+  return { assignment: { class: { academicGroup: { campusId } } } };
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireAuth(request, ["admin", "teacher", "student"]);
+    const auth = await requireCampusScope(request, ["admin", "teacher"]);
     if (auth.error) return auth.error;
     const { id } = await params;
     const body = await request.json();
-    if (!body.content) {
-      return NextResponse.json({ error: "content is required" }, { status: 400 });
+    if (!body.gradedBy || body.score === undefined || body.score === null) {
+      return NextResponse.json({ error: "gradedBy and score are required" }, { status: 400 });
     }
 
-    const submission = await prisma.submission.findUnique({
-      where: { id },
-      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 }, grade: true, correctionRequests: { where: { status: "open" } } },
+    const submission = await prisma.submission.findFirst({
+      where: { id, ...submissionScopeFilter(auth.scope!.campusId) },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 }, grade: true, assignment: true },
     });
     if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    if (submission.grade) return NextResponse.json({ error: "Grade already exists" }, { status: 409 });
 
-    if (submission.grade) {
-      return NextResponse.json({ error: "Cannot create new version: submission already graded" }, { status: 409 });
+    const grader = await prisma.user.findFirst({
+      where: {
+        id: body.gradedBy,
+        ...(auth.scope!.campusId ? { campusId: auth.scope!.campusId } : {}),
+      },
+    });
+    if (!grader) return NextResponse.json({ error: "Grader not found" }, { status: 404 });
+
+    const latestVersion = submission.versions[0];
+    if (!latestVersion) return NextResponse.json({ error: "No versions to grade" }, { status: 400 });
+
+    const score = Number(body.score);
+    if (score < 0) return NextResponse.json({ error: "Score cannot be negative" }, { status: 400 });
+    if (score > submission.assignment.points) {
+      return NextResponse.json({ error: `Score cannot exceed max points (${submission.assignment.points})` }, { status: 400 });
     }
 
-    const latestVersionNumber = submission.versions[0]?.versionNumber || 0;
-    const nextVersionNumber = latestVersionNumber + 1;
-
-    if (submission.correctionRequests.length > 0) {
-      await prisma.correctionRequest.updateMany({
-        where: { submissionId: id, status: "open" },
-        data: { status: "closed", closedAt: new Date() },
-      });
-    }
-
-    const version = await prisma.submissionVersion.create({
+    const grade = await prisma.grade.create({
       data: {
         submissionId: id,
-        versionNumber: nextVersionNumber,
-        content: body.content,
-        attachments: body.attachments?.length
-          ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url })) }
-          : undefined,
+        score,
+        feedback: body.feedback || "",
+        gradedVersion: latestVersion.versionNumber,
+        gradedBy: body.gradedBy,
       },
-      include: { attachments: true },
+      include: { grader: true },
     });
 
-    return NextResponse.json(version, { status: 201 });
+    return NextResponse.json(grade, { status: 201 });
   } catch {
-    return NextResponse.json({ error: "Failed to create version" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create grade" }, { status: 500 });
   }
 }

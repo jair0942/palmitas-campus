@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, writeCampusError } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
     const semesterId = searchParams.get("semesterId");
 
-    const where = semesterId ? { semesterId } : {};
+    const where: Record<string, unknown> = {};
+    if (auth.scope!.campusId) {
+      where.academicGroup = { campusId: auth.scope!.campusId };
+    }
+    if (semesterId) {
+      where.semesterId = semesterId;
+      if (auth.scope!.campusId) {
+        where.AND = [{ academicGroup: { campusId: auth.scope!.campusId } }, { semesterId }];
+        delete where.semesterId;
+      }
+    }
 
     const enrollments = await prisma.enrollment.findMany({
       where,
@@ -24,18 +34,30 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireCampusScope(request, ["admin", "teacher"]);
+    if (auth.error) return auth.error;
+    const writeError = writeCampusError(auth.scope);
+    if (writeError) return writeError;
     const body = await request.json();
     if (!body.studentId || !body.semesterId || !body.academicGroupId) {
       return NextResponse.json({ error: "studentId, semesterId, and academicGroupId are required" }, { status: 400 });
     }
 
-    const student = await prisma.user.findUnique({ where: { id: body.studentId } });
+    const campusId = auth.scope!.campusId;
+
+    const student = await prisma.user.findFirst({
+      where: { id: body.studentId, campusId },
+    });
     if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-    const semester = await prisma.semester.findUnique({ where: { id: body.semesterId } });
+    const semester = await prisma.semester.findFirst({
+      where: { id: body.semesterId, campusId },
+    });
     if (!semester) return NextResponse.json({ error: "Semester not found" }, { status: 404 });
 
-    const group = await prisma.academicGroup.findUnique({ where: { id: body.academicGroupId } });
+    const group = await prisma.academicGroup.findFirst({
+      where: { id: body.academicGroupId, campusId },
+    });
     if (!group) return NextResponse.json({ error: "Academic group not found" }, { status: 404 });
 
     if (group.semesterId !== body.semesterId) {

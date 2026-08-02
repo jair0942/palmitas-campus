@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
-    const where = userId ? { userId } : {};
+    const where: Record<string, unknown> = {};
+    if (auth.scope!.role === "admin") {
+      if (userId) {
+        const targetUser = await prisma.user.findUnique({ where: { id: userId } });
+        if (!targetUser) {
+          return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+        if (auth.scope!.campusId && targetUser.campusId !== auth.scope!.campusId) {
+          return NextResponse.json(
+            { error: "No puede consultar notificaciones de usuarios de otra sede" },
+            { status: 403 }
+          );
+        }
+        where.userId = userId;
+      }
+    } else {
+      where.userId = auth.scope!.userId;
+    }
 
     const notifications = await prisma.notification.findMany({
       where,
@@ -23,9 +40,27 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireCampusScope(request);
+    if (auth.error) return auth.error;
     const body = await request.json();
     if (!body.userId || !body.type || !body.title || !body.message) {
       return NextResponse.json({ error: "userId, type, title, and message are required" }, { status: 400 });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: body.userId } });
+    if (!targetUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    if (auth.scope!.campusId && targetUser.campusId !== auth.scope!.campusId) {
+      return NextResponse.json(
+        { error: "No puede notificar a usuarios de otra sede" },
+        { status: 403 }
+      );
+    }
+    if (auth.scope!.role !== "admin" && body.userId !== auth.scope!.userId) {
+      return NextResponse.json(
+        { error: "Solo puede crear notificaciones para sí mismo" },
+        { status: 403 }
+      );
     }
 
     const notification = await prisma.notification.create({

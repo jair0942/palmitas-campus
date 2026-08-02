@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, campusWhere } from "@/lib/campus-scope";
 
 const SALT_ROUNDS = 10;
 
@@ -10,15 +10,24 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
 
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await prisma.user.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (existing.campusId === null && !auth.scope!.isGlobalAdmin) {
+      return NextResponse.json(
+        { error: "No tiene permisos para editar administradores globales" },
+        { status: 403 }
+      );
     }
 
     if (body.username) {
@@ -51,6 +60,11 @@ export async function PATCH(
         return NextResponse.json({ error: `Role '${body.role}' not found` }, { status: 400 });
       }
       updateData.roleId = role.id;
+      if (body.role === "admin" && auth.scope!.isGlobalAdmin) {
+        updateData.campusId = null;
+      } else if (body.role === "admin") {
+        updateData.campusId = auth.scope!.campusId;
+      }
     }
 
     if (body.password) {
@@ -61,6 +75,7 @@ export async function PATCH(
       where: { id },
       data: updateData,
       include: {
+        campus: true,
         role: {
           include: {
             permissions: {
@@ -83,6 +98,10 @@ export async function PATCH(
       avatar: user.avatar,
       role: user.role.name,
       permissions: user.role.permissions.map((rp) => rp.permission.name),
+      campusId: user.campusId,
+      campus: user.campus
+        ? { id: user.campus.id, name: user.campus.name, code: user.campus.code }
+        : null,
       active: user.active,
       blocked: user.blocked,
       mustChangePassword: user.mustChangePassword,
@@ -99,14 +118,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
 
     const { id } = await params;
 
-    const existing = await prisma.user.findUnique({ where: { id } });
+    const existing = await prisma.user.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (existing.campusId === null && !auth.scope!.isGlobalAdmin) {
+      return NextResponse.json(
+        { error: "No tiene permisos para eliminar administradores globales" },
+        { status: 403 }
+      );
     }
 
     await prisma.user.update({

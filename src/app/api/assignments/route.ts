@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
     const { searchParams } = new URL(request.url);
     const classId = searchParams.get("classId");
 
-    const where = classId ? { classId } : {};
+    const where: Record<string, unknown> = {};
+    if (auth.scope!.campusId) {
+      where.class = { academicGroup: { campusId: auth.scope!.campusId } };
+    }
+    if (classId) {
+      where.classId = classId;
+    }
 
     const assignments = await prisma.assignment.findMany({
       where,
@@ -24,14 +30,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAuth(request, ["admin", "teacher"]);
+    const auth = await requireCampusScope(request, ["admin", "teacher"]);
     if (auth.error) return auth.error;
     const body = await request.json();
     if (!body.classId || !body.title) {
       return NextResponse.json({ error: "classId and title are required" }, { status: 400 });
     }
 
-    const cls = await prisma.class.findUnique({ where: { id: body.classId } });
+    const cls = await prisma.class.findFirst({
+      where: {
+        id: body.classId,
+        ...(auth.scope!.campusId
+          ? { academicGroup: { campusId: auth.scope!.campusId } }
+          : {}),
+      },
+    });
     if (!cls) return NextResponse.json({ error: "Class not found" }, { status: 404 });
 
     const points = Number(body.points);

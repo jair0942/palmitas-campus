@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, campusWhere } from "@/lib/campus-scope";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
 
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.semester.findUnique({ where: { id } });
+    const existing = await prisma.semester.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Semester not found" }, { status: 404 });
     }
 
     if (body.code && body.code !== existing.code) {
-      const duplicate = await prisma.semester.findFirst({ where: { code: body.code } });
+      const duplicate = await prisma.semester.findFirst({
+        where: { code: body.code, NOT: { id }, ...campusWhere(auth.scope) },
+      });
       if (duplicate) {
         return NextResponse.json({ error: "Semester code already exists" }, { status: 409 });
       }
@@ -43,11 +47,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
 
     const { id } = await params;
-    const existing = await prisma.semester.findUnique({ where: { id } });
+    const existing = await prisma.semester.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Semester not found" }, { status: 404 });
     }

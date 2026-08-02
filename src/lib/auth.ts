@@ -23,6 +23,7 @@ export async function validateSession(token: string) {
     include: {
       user: {
         include: {
+          campus: true,
           role: {
             include: {
               permissions: {
@@ -51,6 +52,10 @@ export async function validateSession(token: string) {
       avatar: session.user.avatar,
       role: session.user.role.name,
       permissions: session.user.role.permissions.map((rp) => rp.permission.name),
+      campusId: session.user.campusId,
+      campus: session.user.campus
+        ? { id: session.user.campus.id, name: session.user.campus.name, code: session.user.campus.code }
+        : null,
       active: session.user.active,
       blocked: session.user.blocked,
       mustChangePassword: session.user.mustChangePassword,
@@ -76,6 +81,7 @@ export async function loginUser(username: string, password: string, ip?: string,
   const user = await prisma.user.findUnique({
     where: { username },
     include: {
+      campus: true,
       role: {
         include: {
           permissions: {
@@ -124,6 +130,10 @@ export async function loginUser(username: string, password: string, ip?: string,
       avatar: user.avatar,
       role: user.role.name,
       permissions: user.role.permissions.map((rp) => rp.permission.name),
+      campusId: user.campusId,
+      campus: user.campus
+        ? { id: user.campus.id, name: user.campus.name, code: user.campus.code }
+        : null,
       active: user.active,
       blocked: user.blocked,
       mustChangePassword: user.mustChangePassword,

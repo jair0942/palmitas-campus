@@ -1,20 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, writeCampusError } from "@/lib/campus-scope";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
+    const writeError = writeCampusError(auth.scope);
+    if (writeError) return writeError;
 
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.enrollment.findUnique({ where: { id } });
+    const existing = await prisma.enrollment.findFirst({
+      where: {
+        id,
+        ...(auth.scope!.campusId
+          ? { academicGroup: { campusId: auth.scope!.campusId } }
+          : {}),
+      },
+    });
     if (!existing) return NextResponse.json({ error: "Enrollment not found" }, { status: 404 });
 
     if (body.academicGroupId) {
-      const group = await prisma.academicGroup.findUnique({ where: { id: body.academicGroupId } });
+      const group = await prisma.academicGroup.findFirst({
+        where: {
+          id: body.academicGroupId,
+          ...(auth.scope!.campusId ? { campusId: auth.scope!.campusId } : {}),
+        },
+      });
       if (!group) return NextResponse.json({ error: "Academic group not found" }, { status: 404 });
       if (group.semesterId !== existing.semesterId) {
         return NextResponse.json({ error: "Group does not belong to the same semester" }, { status: 400 });
@@ -38,11 +52,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
 
     const { id } = await params;
-    const existing = await prisma.enrollment.findUnique({ where: { id } });
+    const existing = await prisma.enrollment.findFirst({
+      where: {
+        id,
+        ...(auth.scope!.campusId
+          ? { academicGroup: { campusId: auth.scope!.campusId } }
+          : {}),
+      },
+    });
     if (!existing) return NextResponse.json({ error: "Enrollment not found" }, { status: 404 });
 
     await prisma.enrollment.delete({ where: { id } });

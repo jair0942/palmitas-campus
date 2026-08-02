@@ -1,5 +1,12 @@
 export type Role = "admin" | "teacher" | "student";
 
+export interface Campus {
+  id: string;
+  name: string;
+  code: string;
+  active: boolean;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -13,6 +20,8 @@ export interface User {
   email?: string | null;
   role: Role;
   avatar: string;
+  campusId?: string | null;
+  campus?: Pick<Campus, "id" | "name" | "code"> | null;
   active: boolean;
   blocked: boolean;
   mustChangePassword: boolean;
@@ -28,6 +37,7 @@ export interface Semester {
   active: boolean;
   startDate: string;
   endDate: string;
+  campusId?: string | null;
   createdAt: string;
 }
 
@@ -39,6 +49,7 @@ export interface Cycle {
   order: number;
   usesSubjects: boolean;
   active: boolean;
+  campusId?: string | null;
 }
 
 export interface Subject {
@@ -48,6 +59,7 @@ export interface Subject {
   color: string;
   icon: string;
   active: boolean;
+  campusId?: string | null;
 }
 
 export interface AcademicGroup {
@@ -58,6 +70,7 @@ export interface AcademicGroup {
   nameInternal: string;
   nameForStudents: string;
   active: boolean;
+  campusId?: string | null;
   createdAt: string;
 }
 
@@ -68,6 +81,7 @@ export interface TeachingAssignment {
   subjectId?: string | null;
   academicGroupId?: string | null;
   active: boolean;
+  campusId?: string | null;
   createdAt: string;
 }
 

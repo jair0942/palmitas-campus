@@ -67,8 +67,11 @@ export default function AppHeader({ onMenuClick }: AppHeaderProps) {
   const {
     getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead,
     semesters, getActiveSemester, setActiveSemester,
+    user, campuses, activeCampus, setActiveCampus,
   } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const isGlobalAdmin = !!user && user.role === "admin" && !user.campusId;
 
   const notifications = getNotifications();
   const unreadCount = getUnreadCount();
@@ -118,6 +121,23 @@ export default function AppHeader({ onMenuClick }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        {mounted && isGlobalAdmin && (
+          <Select
+            value={activeCampus?.id || ""}
+            onValueChange={(v) => { if (v) setActiveCampus(v); }}
+          >
+            <SelectTrigger size="sm" className="h-10 border-[#E5E7EB] bg-[#F8FAFC] text-[14px]">
+              <SelectValue placeholder="Sede" />
+            </SelectTrigger>
+            <SelectContent>
+              {campuses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {mounted && (
           <Select
             value={activeSem?.id || ""}

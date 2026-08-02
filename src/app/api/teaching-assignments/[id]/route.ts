@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, campusWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
@@ -7,25 +7,45 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireCampusScope(request, ["admin"]);
+    if (auth.error) return auth.error;
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.teachingAssignment.findUnique({ where: { id } });
+    const existing = await prisma.teachingAssignment.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
     }
 
+    const campusId = existing.campusId;
+
     if (body.teacherId) {
-      const teacher = await prisma.user.findUnique({ where: { id: body.teacherId } });
+      const teacher = await prisma.user.findFirst({ where: { id: body.teacherId, campusId } });
       if (!teacher) {
         return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
       }
     }
 
     if (body.subjectId) {
-      const subject = await prisma.subject.findUnique({ where: { id: body.subjectId } });
+      const subject = await prisma.subject.findFirst({ where: { id: body.subjectId, campusId } });
       if (!subject) {
         return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+      }
+    }
+
+    if (body.cycleId) {
+      const cycle = await prisma.cycle.findFirst({ where: { id: body.cycleId, campusId } });
+      if (!cycle) {
+        return NextResponse.json({ error: "Cycle not found" }, { status: 404 });
+      }
+    }
+
+    if (body.academicGroupId) {
+      const group = await prisma.academicGroup.findFirst({ where: { id: body.academicGroupId, campusId } });
+      if (!group) {
+        return NextResponse.json({ error: "Academic group not found" }, { status: 404 });
       }
     }
 
@@ -54,12 +74,16 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireCampusScope(request, ["admin"]);
+    if (auth.error) return auth.error;
     const { id } = await params;
-    const existing = await prisma.teachingAssignment.findUnique({ where: { id } });
+    const existing = await prisma.teachingAssignment.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
     if (!existing) {
       return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
     }

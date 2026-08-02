@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, campusWhere, writeCampusError } from "@/lib/campus-scope";
 
 const SALT_ROUNDS = 10;
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
+    const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
 
     const users = await prisma.user.findMany({
+      where: campusWhere(auth.scope),
       include: {
+        campus: true,
         role: {
           include: {
             permissions: {
@@ -35,6 +37,10 @@ export async function GET(request: NextRequest) {
       avatar: u.avatar,
       role: u.role.name,
       permissions: u.role.permissions.map((rp) => rp.permission.name),
+      campusId: u.campusId,
+      campus: u.campus
+        ? { id: u.campus.id, name: u.campus.name, code: u.campus.code }
+        : null,
       active: u.active,
       blocked: u.blocked,
       mustChangePassword: u.mustChangePassword,
@@ -51,8 +57,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAuth(request, ["admin"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
+    const writeError = writeCampusError(auth.scope);
+    if (writeError) return writeError;
 
     const body = await request.json();
     if (!body.username || !body.password || !body.role || !body.firstName) {
@@ -75,6 +83,11 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(body.password, SALT_ROUNDS);
 
+    const campusId =
+      body.role === "admin" && auth.scope!.isGlobalAdmin
+        ? null
+        : auth.scope!.campusId;
+
     const user = await prisma.user.create({
       data: {
         username,
@@ -87,11 +100,13 @@ export async function POST(request: NextRequest) {
         documentNumber: body.documentNumber || "",
         avatar: body.avatar || "",
         roleId: role.id,
+        campusId,
         active: body.active ?? true,
         blocked: body.blocked ?? false,
         mustChangePassword: true,
       },
       include: {
+        campus: true,
         role: {
           include: {
             permissions: {
@@ -115,6 +130,10 @@ export async function POST(request: NextRequest) {
         avatar: user.avatar,
         role: user.role.name,
         permissions: user.role.permissions.map((rp) => rp.permission.name),
+        campusId: user.campusId,
+        campus: user.campus
+          ? { id: user.campus.id, name: user.campus.name, code: user.campus.code }
+          : null,
         active: user.active,
         blocked: user.blocked,
         mustChangePassword: user.mustChangePassword,

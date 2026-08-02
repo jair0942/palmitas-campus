@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireCampusScope } from "@/lib/campus-scope";
 
 function getUrlInfo() {
   const raw = process.env.DATABASE_URL;
@@ -21,7 +22,10 @@ function getUrlInfo() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireCampusScope(request, ["admin"]);
+  if (auth.error) return auth.error;
+
   const urlInfo = getUrlInfo();
 
   try {

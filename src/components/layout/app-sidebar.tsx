@@ -27,6 +27,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -86,12 +93,17 @@ function SidebarContent({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useStore();
+  const { user, logout, campuses, activeCampus, setActiveCampus } = useStore();
 
   async function handleLogout() {
     await logout();
     router.push("/");
   }
+
+  const isGlobalAdmin = !!user && user.role === "admin" && !user.campusId;
+  const campusName = isGlobalAdmin
+    ? activeCampus?.name || "Todas las sedes"
+    : user?.campus?.name || "";
 
   const displayName = getUserDisplayName(user);
   const initials = getUserInitials(user);
@@ -172,11 +184,39 @@ function SidebarContent({
                 <span className="inline-flex w-fit rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/80">
                   {roleLabel}
                 </span>
+                {campusName && (
+                  <span className="inline-flex w-fit rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/80">
+                    Sede {campusName}
+                  </span>
+                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {isGlobalAdmin && !collapsed && (
+        <div className="px-4 pb-4">
+          <Select
+            value={activeCampus?.id || ""}
+            onValueChange={(v) => { if (v) setActiveCampus(v); }}
+          >
+            <SelectTrigger className="h-9 w-full bg-white/10 border-white/15 text-[13px] text-white [&>svg]:text-white/70">
+              <SelectValue placeholder="Seleccionar sede" />
+            </SelectTrigger>
+            <SelectContent>
+              {campuses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1.5 text-[11px] text-white/50">
+            Administrando: <span className="font-semibold text-white/80">{campusName}</span>
+          </p>
+        </div>
+      )}
 
       <Separator className="mx-3 w-auto bg-white/10" />
 

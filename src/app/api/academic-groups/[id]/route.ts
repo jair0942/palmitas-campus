@@ -1,60 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope, campusWhere } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireAuth(request, ["admin", "teacher"]);
+    const auth = await requireCampusScope(request, ["admin"]);
     if (auth.error) return auth.error;
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.assignment.findUnique({ where: { id } });
-    if (!existing) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    const existing = await prisma.academicGroup.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
+    if (!existing) return NextResponse.json({ error: "Academic group not found" }, { status: 404 });
 
-    if (body.points !== undefined && Number(body.points) < 0) {
-      return NextResponse.json({ error: "Points cannot be negative" }, { status: 400 });
+    const campusId = existing.campusId;
+
+    if (body.semesterId && body.semesterId !== existing.semesterId) {
+      const semester = await prisma.semester.findFirst({ where: { id: body.semesterId, campusId } });
+      if (!semester) return NextResponse.json({ error: "Semester not found" }, { status: 404 });
+    }
+    if (body.cycleId && body.cycleId !== existing.cycleId) {
+      const cycle = await prisma.cycle.findFirst({ where: { id: body.cycleId, campusId } });
+      if (!cycle) return NextResponse.json({ error: "Cycle not found" }, { status: 404 });
+    }
+    if (body.managerTeacherId) {
+      const teacher = await prisma.user.findFirst({ where: { id: body.managerTeacherId, campusId } });
+      if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
     }
 
-    const publishAt = body.publishAt ? new Date(body.publishAt) : existing.publishAt;
-    const dueDate = body.dueDate ? new Date(body.dueDate) : existing.dueDate;
+    const data: Record<string, unknown> = {};
+    if (body.semesterId !== undefined) data.semesterId = body.semesterId;
+    if (body.cycleId !== undefined) data.cycleId = body.cycleId;
+    if (body.managerTeacherId !== undefined) data.managerTeacherId = body.managerTeacherId || null;
+    if (body.nameInternal !== undefined) data.nameInternal = body.nameInternal;
+    if (body.nameForStudents !== undefined) data.nameForStudents = body.nameForStudents;
+    if (body.active !== undefined) data.active = body.active;
 
-    if (dueDate < publishAt) {
-      return NextResponse.json({ error: "Due date cannot be before publish date" }, { status: 400 });
-    }
-
-    const assignment = await prisma.assignment.update({
+    const group = await prisma.academicGroup.update({
       where: { id },
-      data: {
-        ...(body.title !== undefined ? { title: body.title } : {}),
-        ...(body.description !== undefined ? { description: body.description } : {}),
-        ...(body.points !== undefined ? { points: Number(body.points) } : {}),
-        ...(body.dueDate !== undefined ? { dueDate: new Date(body.dueDate) } : {}),
-        ...(body.publishAt !== undefined ? { publishAt: new Date(body.publishAt) } : {}),
-      },
-      include: { attachments: true },
+      data,
+      include: { semester: true, cycle: true, managerTeacher: true },
     });
 
-    return NextResponse.json(assignment);
+    return NextResponse.json(group);
   } catch {
-    return NextResponse.json({ error: "Failed to update assignment" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update academic group" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireCampusScope(request, ["admin"]);
+    if (auth.error) return auth.error;
     const { id } = await params;
-    const existing = await prisma.assignment.findUnique({ where: { id } });
-    if (!existing) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    const existing = await prisma.academicGroup.findFirst({
+      where: { id, ...campusWhere(auth.scope) },
+    });
+    if (!existing) return NextResponse.json({ error: "Academic group not found" }, { status: 404 });
 
-    const subCount = await prisma.submission.count({ where: { assignmentId: id } });
-    if (subCount > 0) {
-      return NextResponse.json({ error: "Cannot delete assignment with submissions" }, { status: 409 });
-    }
-
-    await prisma.assignment.delete({ where: { id } });
+    await prisma.academicGroup.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch {
-    return NextResponse.json({ error: "Failed to delete assignment" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete academic group" }, { status: 500 });
   }
 }

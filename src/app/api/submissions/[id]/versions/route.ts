@@ -1,55 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireCampusScope } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
+
+function submissionScopeFilter(campusId: string | null) {
+  if (!campusId) return {};
+  return { assignment: { class: { academicGroup: { campusId } } } };
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requireAuth(request, ["admin", "teacher"]);
+    const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
     const { id } = await params;
-    const corrections = await prisma.correctionRequest.findMany({
-      where: { submissionId: id },
-      include: { teacher: true },
-      orderBy: { createdAt: "desc" },
+    const submission = await prisma.submission.findFirst({
+      where: { id, ...submissionScopeFilter(auth.scope!.campusId) },
     });
-    return NextResponse.json(corrections);
+    if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+
+    const versions = await prisma.submissionVersion.findMany({
+      where: { submissionId: id },
+      include: { attachments: true },
+      orderBy: { versionNumber: "desc" },
+    });
+    return NextResponse.json(versions);
   } catch {
-    return NextResponse.json({ error: "Failed to read correction requests" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to read versions" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requireCampusScope(request, ["admin", "teacher", "student"]);
+    if (auth.error) return auth.error;
     const { id } = await params;
     const body = await request.json();
-    if (!body.teacherId || !body.observations) {
-      return NextResponse.json({ error: "teacherId and observations are required" }, { status: 400 });
+    if (!body.content) {
+      return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
 
-    const submission = await prisma.submission.findUnique({
-      where: { id },
-      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    const submission = await prisma.submission.findFirst({
+      where: { id, ...submissionScopeFilter(auth.scope!.campusId) },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 }, grade: true, correctionRequests: { where: { status: "open" } } },
     });
     if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
 
-    const teacher = await prisma.user.findUnique({ where: { id: body.teacherId } });
-    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+    if (auth.scope!.role === "student" && submission.studentId !== auth.scope!.userId) {
+      return NextResponse.json({ error: "No puedes modificar la entrega de otro estudiante" }, { status: 403 });
+    }
 
-    const latestVersion = submission.versions[0];
-    if (!latestVersion) return NextResponse.json({ error: "No versions to request correction on" }, { status: 400 });
+    if (submission.grade) {
+      return NextResponse.json({ error: "Cannot create new version: submission already graded" }, { status: 409 });
+    }
 
-    const correction = await prisma.correctionRequest.create({
+    const latestVersionNumber = submission.versions[0]?.versionNumber || 0;
+    const nextVersionNumber = latestVersionNumber + 1;
+
+    if (submission.correctionRequests.length > 0) {
+      await prisma.correctionRequest.updateMany({
+        where: { submissionId: id, status: "open" },
+        data: { status: "closed", closedAt: new Date() },
+      });
+    }
+
+    const version = await prisma.submissionVersion.create({
       data: {
         submissionId: id,
-        versionId: latestVersion.id,
-        teacherId: body.teacherId,
-        observations: body.observations,
+        versionNumber: nextVersionNumber,
+        content: body.content,
+        attachments: body.attachments?.length
+          ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url })) }
+          : undefined,
       },
-      include: { teacher: true },
+      include: { attachments: true },
     });
 
-    return NextResponse.json(correction, { status: 201 });
+    return NextResponse.json(version, { status: 201 });
   } catch {
-    return NextResponse.json({ error: "Failed to create correction request" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create version" }, { status: 500 });
   }
 }

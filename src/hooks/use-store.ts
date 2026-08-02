@@ -6,6 +6,7 @@ import type {
   Assignment,
   Attachment,
   AuditLog,
+  Campus,
   Class,
   Comment,
   Cycle,
@@ -27,6 +28,7 @@ import { getUserDisplayName } from "@/lib/domain";
 interface AppState {
   user: User | null;
   users: User[];
+  campuses: Campus[];
   semesters: Semester[];
   cycles: Cycle[];
   subjects: Subject[];
@@ -56,6 +58,7 @@ const emptyInstitutionSettings: InstitutionSettings = {
 let globalState: AppState = {
   user: null,
   users: [],
+  campuses: [],
   semesters: [],
   cycles: [],
   subjects: [],
@@ -129,6 +132,8 @@ function mapApiUserToStore(apiUser: Record<string, unknown>): User {
     email: (apiUser.email as string) || null,
     role: apiUser.role as "admin" | "teacher" | "student",
     avatar: (apiUser.avatar as string) || "",
+    campusId: (apiUser.campusId as string) || null,
+    campus: (apiUser.campus as { id: string; name: string; code: string } | undefined) || null,
     active: apiUser.active as boolean,
     blocked: apiUser.blocked as boolean,
     mustChangePassword: (apiUser.mustChangePassword as boolean) || false,
@@ -136,6 +141,30 @@ function mapApiUserToStore(apiUser: Record<string, unknown>): User {
     createdAt: (apiUser.createdAt as string) || new Date().toISOString(),
     updatedAt: (apiUser.updatedAt as string) || new Date().toISOString(),
   };
+}
+
+const CAMPUS_STORAGE_KEY = "campusVirtual.activeCampusId";
+
+function getStoredCampusId(): string | null {
+  try {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(CAMPUS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function isGlobalAdminUser(user: User | null): boolean {
+  return !!user && user.role === "admin" && !user.campusId;
+}
+
+async function fetchApi(input: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (isGlobalAdminUser(globalState.user)) {
+    const campusId = getStoredCampusId();
+    if (campusId) headers.set("x-campus-id", campusId);
+  }
+  return fetch(input, { ...init, headers });
 }
 
 function mapApiSubmissionToOldFormat(sub: Record<string, unknown>): Submission & { assignmentId?: string } {
@@ -164,7 +193,7 @@ async function notifyUsers(userIds: string[], type: NotificationType, title: str
     if (!userId || seen.has(userId)) continue;
     seen.add(userId);
     try {
-      const res = await fetch("/api/notifications", {
+      const res = await fetchApi("/api/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, type, title, message, classId, relatedId }),
@@ -187,7 +216,7 @@ async function logAction(
 ) {
   const userId: string | null = globalState.user?.id || null;
   try {
-    const res = await fetch("/api/audit-logs", {
+    const res = await fetchApi("/api/audit-logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, action, module, result, metadata, tableName, recordId }),
@@ -206,24 +235,32 @@ export function useStore() {
     const handler = () => setTick((tick) => tick + 1);
     listeners.push(handler);
 
-    async function restoreSession() {
-      try {
-        const [meRes, usersRes, semestersRes, cyclesRes, subjectsRes, tasRes, settingsRes, groupsRes, enrollmentsRes, classesRes, postsRes, assignmentsRes, fileAssetsRes, submissionsRes] = await Promise.all([
-          fetch("/api/auth/me"),
-          fetch("/api/users"),
-          fetch("/api/semesters"),
-          fetch("/api/cycles"),
-          fetch("/api/subjects"),
-          fetch("/api/teaching-assignments"),
-          fetch("/api/institution-settings"),
-          fetch("/api/academic-groups"),
-          fetch("/api/enrollments"),
-          fetch("/api/classes"),
-          fetch("/api/posts"),
-          fetch("/api/assignments"),
-          fetch("/api/file-assets"),
-          fetch("/api/submissions"),
-        ]);
+    loadAll().finally(handler);
+
+    return () => {
+      listeners = listeners.filter((listener) => listener !== handler);
+    };
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    try {
+      const [meRes, usersRes, semestersRes, cyclesRes, subjectsRes, tasRes, settingsRes, groupsRes, enrollmentsRes, classesRes, postsRes, assignmentsRes, fileAssetsRes, submissionsRes, campusesRes] = await Promise.all([
+        fetchApi("/api/auth/me"),
+        fetchApi("/api/users"),
+        fetchApi("/api/semesters"),
+        fetchApi("/api/cycles"),
+        fetchApi("/api/subjects"),
+        fetchApi("/api/teaching-assignments"),
+        fetchApi("/api/institution-settings"),
+        fetchApi("/api/academic-groups"),
+        fetchApi("/api/enrollments"),
+        fetchApi("/api/classes"),
+        fetchApi("/api/posts"),
+        fetchApi("/api/assignments"),
+        fetchApi("/api/file-assets"),
+        fetchApi("/api/submissions"),
+        fetchApi("/api/campuses"),
+      ]);
         if (usersRes.ok) {
           const apiUsers = await usersRes.json();
           globalState = { ...globalState, users: apiUsers.map(mapApiUserToStore) };
@@ -275,24 +312,33 @@ export function useStore() {
         if (meRes.ok) {
           const meData = await meRes.json();
           if (meData.user) {
-            globalState = { ...globalState, user: mapApiUserToStore(meData.user) };
+            const meUser = mapApiUserToStore(meData.user);
+            globalState = { ...globalState, user: meUser };
+            if (isGlobalAdminUser(meUser)) {
+              const stored = getStoredCampusId();
+              if (!stored) {
+                const firstCampus = (campusesRes.ok ? await campusesRes.json() : globalState.campuses)[0];
+                if (firstCampus) {
+                  try {
+                    localStorage.setItem(CAMPUS_STORAGE_KEY, firstCampus.id);
+                  } catch {}
+                }
+              }
+            }
           }
         }
-        handler();
+        if (campusesRes.ok) {
+          const apiCampuses = await campusesRes.json();
+          globalState = { ...globalState, campuses: apiCampuses };
+        }
       } catch {
         // API unavailable
       }
-    }
-    restoreSession();
-
-    return () => {
-      listeners = listeners.filter((listener) => listener !== handler);
-    };
-  }, []);
+    }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<User | null> => {
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetchApi("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -320,7 +366,7 @@ export function useStore() {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetchApi("/api/auth/logout", { method: "POST" });
     } catch {}
     globalState = { ...globalState, user: null };
     notify();
@@ -455,7 +501,7 @@ export function useStore() {
 
   const markNotificationRead = useCallback(async (notificationId: string) => {
     try {
-      const res = await fetch(`/api/notifications/${notificationId}`, {
+      const res = await fetchApi(`/api/notifications/${notificationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isRead: true }),
@@ -476,7 +522,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch("/api/notifications/read-all", {
+      const res = await fetchApi("/api/notifications/read-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
@@ -496,7 +542,7 @@ export function useStore() {
 
   const setActiveSemester = useCallback(async (semesterId: string) => {
     try {
-      const res = await fetch("/api/semesters/activate", {
+      const res = await fetchApi("/api/semesters/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ semesterId }),
@@ -514,7 +560,7 @@ export function useStore() {
 
   const addSemester = useCallback(async (data: { code: string; name: string; startDate: string; endDate: string }): Promise<Semester | null> => {
     try {
-      const res = await fetch("/api/semesters", {
+      const res = await fetchApi("/api/semesters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -531,7 +577,7 @@ export function useStore() {
 
   const updateSemester = useCallback(async (semesterId: string, data: Partial<Pick<Semester, "code" | "name" | "startDate" | "endDate">>) => {
     try {
-      const res = await fetch(`/api/semesters/${semesterId}`, {
+      const res = await fetchApi(`/api/semesters/${semesterId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -548,7 +594,7 @@ export function useStore() {
 
   const deleteSemester = useCallback(async (semesterId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/semesters/${semesterId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/semesters/${semesterId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = {
         ...globalState,
@@ -563,7 +609,7 @@ export function useStore() {
 
   const addCycle = useCallback(async (data: { code: string; name: string; description: string; order: number; usesSubjects?: boolean }): Promise<Cycle | null> => {
     try {
-      const res = await fetch("/api/cycles", {
+      const res = await fetchApi("/api/cycles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -580,7 +626,7 @@ export function useStore() {
 
   const updateCycle = useCallback(async (cycleId: string, data: Partial<Pick<Cycle, "code" | "name" | "description" | "order" | "usesSubjects" | "active">>) => {
     try {
-      const res = await fetch(`/api/cycles/${cycleId}`, {
+      const res = await fetchApi(`/api/cycles/${cycleId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -597,7 +643,7 @@ export function useStore() {
 
   const deleteCycle = useCallback(async (cycleId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/cycles/${cycleId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/cycles/${cycleId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = {
         ...globalState,
@@ -612,7 +658,7 @@ export function useStore() {
 
   const addSubject = useCallback(async (data: { name: string; code: string; color?: string; icon?: string; active?: boolean }): Promise<Subject | null> => {
     try {
-      const res = await fetch("/api/subjects", {
+      const res = await fetchApi("/api/subjects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -629,7 +675,7 @@ export function useStore() {
 
   const updateSubject = useCallback(async (subjectId: string, data: Partial<Pick<Subject, "name" | "code" | "color" | "icon" | "active">>) => {
     try {
-      const res = await fetch(`/api/subjects/${subjectId}`, {
+      const res = await fetchApi(`/api/subjects/${subjectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -646,7 +692,7 @@ export function useStore() {
 
   const deleteSubject = useCallback(async (subjectId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/subjects/${subjectId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/subjects/${subjectId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = {
         ...globalState,
@@ -661,7 +707,7 @@ export function useStore() {
 
   const addAcademicGroup = useCallback(async (data: { semesterId: string; cycleId: string; managerTeacherId?: string | null; nameInternal: string; nameForStudents: string }): Promise<AcademicGroup | null> => {
     try {
-      const res = await fetch("/api/academic-groups", {
+      const res = await fetchApi("/api/academic-groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -678,7 +724,7 @@ export function useStore() {
 
   const addEnrollment = useCallback(async (studentId: string, semesterId: string, academicGroupId: string): Promise<Enrollment | null> => {
     try {
-      const res = await fetch("/api/enrollments", {
+      const res = await fetchApi("/api/enrollments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ studentId, semesterId, academicGroupId }),
@@ -695,7 +741,7 @@ export function useStore() {
 
   const removeEnrollment = useCallback(async (enrollmentId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+      const res = await fetchApi(`/api/enrollments/${enrollmentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "WITHDRAWN" }),
@@ -741,7 +787,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch("/api/posts", {
+      const res = await fetchApi("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ classId, content, attachments, authorId: user.id }),
@@ -778,7 +824,7 @@ export function useStore() {
         if (existingGroup) {
           academicGroupId = existingGroup.id;
         } else {
-          const groupRes = await fetch("/api/academic-groups", {
+          const groupRes = await fetchApi("/api/academic-groups", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -803,7 +849,7 @@ export function useStore() {
         (ta.academicGroupId || null) === (academicGroupId || null)
       )?.id;
       if (!taId) {
-        const taRes = await fetch("/api/teaching-assignments", {
+        const taRes = await fetchApi("/api/teaching-assignments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -818,7 +864,7 @@ export function useStore() {
         taId = newTA.id;
         globalState = { ...globalState, teachingAssignments: [...globalState.teachingAssignments, newTA] };
       }
-      const classRes = await fetch("/api/classes", {
+      const classRes = await fetchApi("/api/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -842,7 +888,7 @@ export function useStore() {
 
   const updateClass = useCallback(async (classId: string, data: Partial<Pick<Class, "name" | "description" | "section" | "subjectId" | "academicGroupId" | "teachingAssignmentId">>) => {
     try {
-      const res = await fetch(`/api/classes/${classId}`, {
+      const res = await fetchApi(`/api/classes/${classId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -856,7 +902,7 @@ export function useStore() {
 
   const deleteClass = useCallback(async (classId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/classes/${classId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/classes/${classId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = { ...globalState, classes: globalState.classes.filter((c) => c.id !== classId) };
       notify();
@@ -878,7 +924,7 @@ export function useStore() {
     phone?: string;
   }): Promise<User | null> => {
     try {
-      const res = await fetch("/api/users", {
+      const res = await fetchApi("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -900,7 +946,7 @@ export function useStore() {
 
   const updateUser = useCallback(async (userId: string, data: Partial<Pick<User, "username" | "password" | "firstName" | "lastName" | "email" | "role" | "documentType" | "documentNumber" | "phone" | "active" | "blocked" | "mustChangePassword">>) => {
     try {
-      const res = await fetch(`/api/users/${userId}`, {
+      const res = await fetchApi(`/api/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -921,7 +967,7 @@ export function useStore() {
 
   const deleteUser = useCallback(async (userId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/users/${userId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = { ...globalState, users: globalState.users.filter((u) => u.id !== userId) };
       notify();
@@ -942,7 +988,7 @@ export function useStore() {
     );
     if (!existing) {
       try {
-        const res = await fetch("/api/enrollments", {
+        const res = await fetchApi("/api/enrollments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ studentId, semesterId: group.semesterId, academicGroupId: group.id }),
@@ -968,7 +1014,7 @@ export function useStore() {
     );
     if (!enrollment) return;
     try {
-      const res = await fetch(`/api/enrollments/${enrollment.id}`, {
+      const res = await fetchApi(`/api/enrollments/${enrollment.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "WITHDRAWN" }),
@@ -990,7 +1036,7 @@ export function useStore() {
     const ta = globalState.teachingAssignments.find((a) => a.id === cls.teachingAssignmentId);
     if (ta) {
       try {
-        const res = await fetch(`/api/teaching-assignments/${ta.id}`, {
+        const res = await fetchApi(`/api/teaching-assignments/${ta.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ teacherId }),
@@ -1017,7 +1063,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch("/api/assignments", {
+      const res = await fetchApi("/api/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1043,7 +1089,7 @@ export function useStore() {
 
   const deleteAssignment = useCallback(async (assignmentId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/assignments/${assignmentId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/assignments/${assignmentId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = { ...globalState, assignments: globalState.assignments.filter((a) => a.id !== assignmentId) };
       notify();
@@ -1057,7 +1103,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch(`/api/submissions/${submissionId}/grade`, {
+      const res = await fetchApi(`/api/submissions/${submissionId}/grade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gradedBy: user.id, score, feedback }),
@@ -1102,7 +1148,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch("/api/comments", {
+      const res = await fetchApi("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ postId, content, authorId: user.id }),
@@ -1127,7 +1173,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch("/api/comments", {
+      const res = await fetchApi("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authorId: user.id, content, submissionId }),
@@ -1164,13 +1210,13 @@ export function useStore() {
 
       let submissionRes: Response;
       if (existing) {
-        submissionRes = await fetch(`/api/submissions/${existing.id}/versions`, {
+        submissionRes = await fetchApi(`/api/submissions/${existing.id}/versions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content, attachments }),
         });
       } else {
-        submissionRes = await fetch("/api/submissions", {
+        submissionRes = await fetchApi("/api/submissions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ assignmentId, studentId: user.id, content, attachments }),
@@ -1225,7 +1271,7 @@ export function useStore() {
     const user = globalState.user;
     if (!user) return;
     try {
-      const res = await fetch(`/api/submissions/${submissionId}/corrections`, {
+      const res = await fetchApi(`/api/submissions/${submissionId}/corrections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teacherId: user.id, observations: feedback }),
@@ -1261,7 +1307,7 @@ export function useStore() {
     academicGroupId?: string | null;
   }): Promise<TeachingAssignment | null> => {
     try {
-      const res = await fetch("/api/teaching-assignments", {
+      const res = await fetchApi("/api/teaching-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -1278,7 +1324,7 @@ export function useStore() {
 
   const updateTeachingAssignment = useCallback(async (taId: string, data: Partial<Pick<TeachingAssignment, "teacherId" | "cycleId" | "subjectId" | "academicGroupId" | "active">>) => {
     try {
-      const res = await fetch(`/api/teaching-assignments/${taId}`, {
+      const res = await fetchApi(`/api/teaching-assignments/${taId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -1297,7 +1343,7 @@ export function useStore() {
 
   const deleteTeachingAssignment = useCallback(async (taId: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/teaching-assignments/${taId}`, { method: "DELETE" });
+      const res = await fetchApi(`/api/teaching-assignments/${taId}`, { method: "DELETE" });
       if (!res.ok) return false;
       globalState = {
         ...globalState,
@@ -1312,7 +1358,7 @@ export function useStore() {
 
   const updateInstitutionSettings = useCallback(async (data: Partial<Omit<InstitutionSettings, "id" | "createdAt">>) => {
     try {
-      const res = await fetch("/api/institution-settings", {
+      const res = await fetchApi("/api/institution-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -1327,9 +1373,26 @@ export function useStore() {
     } catch {}
   }, []);
 
+  const activeCampus = globalState.campuses.find((c) => c.id === getStoredCampusId()) || null;
+
+  const setActiveCampus = useCallback(async (campusId: string) => {
+    try {
+      localStorage.setItem(CAMPUS_STORAGE_KEY, campusId);
+    } catch {}
+    await loadAll();
+    notify();
+  }, [loadAll]);
+
+  const getUserCampusName = useCallback((userId: string): string => {
+    const u = globalState.users.find((user) => user.id === userId);
+    return u?.campus?.name || "";
+  }, []);
+
   return {
     user: globalState.user,
     users: globalState.users,
+    campuses: globalState.campuses,
+    activeCampus,
     semesters: globalState.semesters,
     cycles: globalState.cycles,
     subjects: globalState.subjects,
@@ -1346,6 +1409,8 @@ export function useStore() {
     auditLogs: globalState.auditLogs,
     login,
     logout,
+    setActiveCampus,
+    getUserCampusName,
     getClassesForUser,
     getPostsForClass,
     getAssignmentsForClass,
