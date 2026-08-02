@@ -435,11 +435,11 @@ async function main() {
     await prisma.institutionSettings.update({
       where: { id: existingSettings.id },
       data: {
-        schoolName: "Institución Educativa Antonio Brugés Carmona - Sede Palmitas",
+        schoolName: "Institución Educativa Antonio Brugués Carmona",
         logoUrl: "/images/logo.jpg",
         shieldUrl: "/images/logo.jpg",
         faviconUrl: "/images/logo.jpg",
-        motto: "Palmitas Campus",
+        motto: "Campus Virtual",
         activeSemesterId: semester.id,
         primaryColor: "#0F6A3B",
         secondaryColor: "#F2C230",
@@ -450,11 +450,11 @@ async function main() {
   } else {
     await prisma.institutionSettings.create({
       data: {
-        schoolName: "Institución Educativa Antonio Brugés Carmona - Sede Palmitas",
+        schoolName: "Institución Educativa Antonio Brugués Carmona",
         logoUrl: "/images/logo.jpg",
         shieldUrl: "/images/logo.jpg",
         faviconUrl: "/images/logo.jpg",
-        motto: "Palmitas Campus",
+        motto: "Campus Virtual",
         activeSemesterId: semester.id,
         primaryColor: "#0F6A3B",
         secondaryColor: "#F2C230",

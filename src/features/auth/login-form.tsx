@@ -74,18 +74,18 @@ export default function LoginForm() {
           >
             <Image
               src="/images/logo.jpg"
-              alt="Palmitas Campus"
+              alt="Campus Virtual"
               width={80}
               height={80}
               className="rounded-2xl shadow-lg shadow-[#0F6A3B]/20"
             />
           </motion.div>
-          <h1 className="text-[32px] font-bold tracking-tight text-[#111827]">Palmitas Campus</h1>
+          <h1 className="text-[32px] font-bold tracking-tight text-[#111827]">Campus Virtual</h1>
           <p className="mt-1 text-center text-[16px] leading-snug text-[#6B7280]">
-            Institucion Educativa Antonio Bruges Carmona - Sede Palmitas
+            Institucion Educativa Antonio Bruges Carmona
           </p>
           <p className="mb-8 mt-4 max-w-xs text-center text-[15px] leading-relaxed text-[#6B7280]/70">
-            Plataforma academica institucional para la gestion educativa de la sede Palmitas.
+            Plataforma academica institucional para la gestion educativa.
           </p>
 
           <form onSubmit={handleLogin} className="flex w-full flex-col gap-4">

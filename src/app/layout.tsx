@@ -8,8 +8,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Palmitas Campus",
-  description: "Plataforma académica de la Institución Educativa Antonio Brugués Carmona – Sede Palmitas.",
+  title: "Campus Virtual",
+  description: "Plataforma académica de la Institución Educativa Antonio Brugués Carmona.",
   icons: {
     icon: "/images/logo.jpg",
     apple: "/images/logo.jpg",

@@ -45,7 +45,7 @@ interface AppState {
 
 const emptyInstitutionSettings: InstitutionSettings = {
   id: "institution-settings",
-  schoolName: "Palmitas Campus",
+  schoolName: "Institución Educativa Antonio Brugués Carmona",
   activeSemesterId: null,
   primaryColor: "#0F6A3B",
   secondaryColor: "#F2C230",

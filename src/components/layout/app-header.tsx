@@ -102,7 +102,7 @@ export default function AppHeader({ onMenuClick }: AppHeaderProps) {
             <Image src="/images/logo.jpg" alt="Logo" width={24} height={24} className="rounded-lg" />
           </div>
           <div>
-            <span className="text-lg font-bold tracking-tight text-[#111827]">Palmitas Campus</span>
+            <span className="text-lg font-bold tracking-tight text-[#111827]">Campus Virtual</span>
           </div>
         </div>
       </div>

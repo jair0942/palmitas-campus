@@ -137,7 +137,7 @@ function SidebarContent({
             >
               <div className="flex flex-col">
                 <span className="truncate text-base font-bold text-white">
-                  Palmitas Campus
+                  Campus Virtual
                 </span>
                 <span className="truncate text-[12px] text-white/60">
                   I.E. Antonio Brugués Carmona
@@ -242,7 +242,7 @@ function SidebarContent({
               <div>
                 <p className="text-[11px] font-semibold text-white/90 leading-tight">Institución Educativa</p>
                 <p className="text-[11px] text-white/60 leading-tight">Antonio Brugués Carmona</p>
-                <p className="text-[11px] text-white/60 leading-tight">Sede Palmitas</p>
+                <p className="text-[11px] text-white/60 leading-tight">Campus Virtual</p>
               </div>
             </motion.div>
           )}
