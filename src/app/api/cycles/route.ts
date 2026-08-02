@@ -22,12 +22,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "code, name, and order are required" }, { status: 400 });
     }
 
-    const existingCode = await prisma.cycle.findUnique({ where: { code: body.code } });
+    const existingCode = await prisma.cycle.findFirst({ where: { code: body.code } });
     if (existingCode) {
       return NextResponse.json({ error: "Cycle code already exists" }, { status: 409 });
     }
 
-    const existingOrder = await prisma.cycle.findUnique({ where: { order: body.order } });
+    const existingOrder = await prisma.cycle.findFirst({ where: { order: body.order } });
     if (existingOrder) {
       return NextResponse.json({ error: "Cycle order already exists" }, { status: 409 });
     }

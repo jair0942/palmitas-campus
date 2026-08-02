@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "code, name, startDate, and endDate are required" }, { status: 400 });
     }
 
-    const existing = await prisma.semester.findUnique({ where: { code: body.code } });
+    const existing = await prisma.semester.findFirst({ where: { code: body.code } });
     if (existing) {
       return NextResponse.json({ error: "Semester code already exists" }, { status: 409 });
     }

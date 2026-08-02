@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "name and code are required" }, { status: 400 });
     }
 
-    const existing = await prisma.subject.findUnique({ where: { code: body.code } });
+    const existing = await prisma.subject.findFirst({ where: { code: body.code } });
     if (existing) {
       return NextResponse.json({ error: "Subject code already exists" }, { status: 409 });
     }

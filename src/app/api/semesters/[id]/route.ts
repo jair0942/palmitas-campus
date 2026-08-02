@@ -19,7 +19,7 @@ export async function PATCH(
     }
 
     if (body.code && body.code !== existing.code) {
-      const duplicate = await prisma.semester.findUnique({ where: { code: body.code } });
+      const duplicate = await prisma.semester.findFirst({ where: { code: body.code } });
       if (duplicate) {
         return NextResponse.json({ error: "Semester code already exists" }, { status: 409 });
       }

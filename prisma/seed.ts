@@ -12,6 +12,25 @@ async function main() {
   const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
 
   // ================================================================
+  // 0. CAMPUS (Sedes)
+  // ================================================================
+
+  const campusesData = [
+    { name: "Palmitas", code: "PALMITAS" },
+    { name: "Jaraba", code: "JARABA" },
+  ];
+
+  const createdCampuses: Record<string, string> = {};
+  for (const c of campusesData) {
+    const campus = await prisma.campus.upsert({
+      where: { code: c.code },
+      update: { name: c.name, active: true },
+      create: { name: c.name, code: c.code, active: true },
+    });
+    createdCampuses[c.code] = campus.id;
+  }
+
+  // ================================================================
   // 1. ROLES
   // ================================================================
 
@@ -182,6 +201,7 @@ async function main() {
         firstName: u.firstName,
         lastName: u.lastName,
         roleId,
+        campusId: u.roleName === "admin" ? null : createdCampuses["PALMITAS"],
         active: u.active,
         blocked: u.blocked,
         mustChangePassword: u.mustChangePassword,
@@ -192,6 +212,7 @@ async function main() {
         firstName: u.firstName,
         lastName: u.lastName,
         roleId,
+        campusId: u.roleName === "admin" ? null : createdCampuses["PALMITAS"],
         active: u.active,
         blocked: u.blocked,
         mustChangePassword: u.mustChangePassword,
@@ -205,7 +226,7 @@ async function main() {
   // ================================================================
 
   const semester = await prisma.semester.upsert({
-    where: { code: "2026-2" },
+    where: { campusId_code: { campusId: createdCampuses["PALMITAS"], code: "2026-2" } },
     update: {
       name: "2026-2",
       active: true,
@@ -218,6 +239,7 @@ async function main() {
       active: true,
       startDate: new Date("2026-07-01"),
       endDate: new Date("2026-12-31"),
+      campusId: createdCampuses["PALMITAS"],
     },
   });
 
@@ -236,9 +258,9 @@ async function main() {
   const createdCycles: Record<string, string> = {};
   for (const c of cyclesData) {
     const cycle = await prisma.cycle.upsert({
-      where: { code: c.code },
-      update: c,
-      create: c,
+      where: { campusId_code: { campusId: createdCampuses["PALMITAS"], code: c.code } },
+      update: { ...c, campusId: createdCampuses["PALMITAS"] },
+      create: { ...c, campusId: createdCampuses["PALMITAS"] },
     });
     createdCycles[c.code] = cycle.id;
   }
@@ -261,9 +283,9 @@ async function main() {
   const createdSubjects: Record<string, string> = {};
   for (const s of subjectsData) {
     const subject = await prisma.subject.upsert({
-      where: { code: s.code },
-      update: { ...s, active: true },
-      create: { ...s, active: true },
+      where: { campusId_code: { campusId: createdCampuses["PALMITAS"], code: s.code } },
+      update: { ...s, active: true, campusId: createdCampuses["PALMITAS"] },
+      create: { ...s, active: true, campusId: createdCampuses["PALMITAS"] },
     });
     createdSubjects[s.code] = subject.id;
   }
@@ -278,6 +300,7 @@ async function main() {
     managerTeacherId?: string | null;
     nameInternal: string;
     nameForStudents: string;
+    campusId: string;
   }) {
     const existing = await prisma.academicGroup.findFirst({
       where: {
@@ -285,6 +308,7 @@ async function main() {
         cycleId: data.cycleId,
         managerTeacherId: data.managerTeacherId ?? null,
         nameInternal: data.nameInternal,
+        campusId: data.campusId,
       },
     });
     if (existing) {
@@ -303,6 +327,7 @@ async function main() {
       managerTeacherId: createdUsers["carmen.alvarado"],
       nameInternal: "Ciclo 2 - Carmen Alvarado",
       nameForStudents: "Ciclo 2",
+      campusId: createdCampuses["PALMITAS"],
     },
     {
       semesterId: semester.id,
@@ -310,6 +335,7 @@ async function main() {
       managerTeacherId: createdUsers["graciela.soto"],
       nameInternal: "Ciclo 2 - Graciela Soto",
       nameForStudents: "Ciclo 2",
+      campusId: createdCampuses["PALMITAS"],
     },
     {
       semesterId: semester.id,
@@ -317,6 +343,7 @@ async function main() {
       managerTeacherId: null,
       nameInternal: "Ciclo 3",
       nameForStudents: "Ciclo 3",
+      campusId: createdCampuses["PALMITAS"],
     },
     {
       semesterId: semester.id,
@@ -324,6 +351,7 @@ async function main() {
       managerTeacherId: null,
       nameInternal: "Ciclo 4",
       nameForStudents: "Ciclo 4",
+      campusId: createdCampuses["PALMITAS"],
     },
     {
       semesterId: semester.id,
@@ -331,6 +359,7 @@ async function main() {
       managerTeacherId: null,
       nameInternal: "Ciclo 5",
       nameForStudents: "Ciclo 5",
+      campusId: createdCampuses["PALMITAS"],
     },
     {
       semesterId: semester.id,
@@ -338,6 +367,7 @@ async function main() {
       managerTeacherId: null,
       nameInternal: "Ciclo 6",
       nameForStudents: "Ciclo 6",
+      campusId: createdCampuses["PALMITAS"],
     },
   ];
 
@@ -379,6 +409,7 @@ async function main() {
         cycleId: data.cycleId,
         subjectId: data.subjectId ?? null,
         academicGroupId: data.academicGroupId ?? null,
+        campusId: createdCampuses["PALMITAS"],
         active: true,
       },
     });
@@ -475,7 +506,7 @@ async function main() {
       module: "system",
       tableName: "all",
       result: "success",
-      metadata: { description: "Seed inicial de la base de datos Palmitas Campus" },
+      metadata: { description: "Seed inicial de la base de datos Campus Virtual" },
     },
   });
 

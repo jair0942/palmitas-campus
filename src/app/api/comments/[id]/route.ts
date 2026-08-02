@@ -16,14 +16,14 @@ export async function PATCH(
     }
 
     if (body.code && body.code !== existing.code) {
-      const duplicate = await prisma.cycle.findUnique({ where: { code: body.code } });
+      const duplicate = await prisma.cycle.findFirst({ where: { code: body.code } });
       if (duplicate) {
         return NextResponse.json({ error: "Cycle code already exists" }, { status: 409 });
       }
     }
 
     if (body.order != null && body.order !== existing.order) {
-      const duplicate = await prisma.cycle.findUnique({ where: { order: body.order } });
+      const duplicate = await prisma.cycle.findFirst({ where: { order: body.order } });
       if (duplicate) {
         return NextResponse.json({ error: "Cycle order already exists" }, { status: 409 });
       }

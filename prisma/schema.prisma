@@ -48,6 +48,30 @@ enum Theme {
 }
 
 // ============================================================
+// CAMPUS
+// Sede de la institución (Palmitas, Jaraba, ...)
+// Un usuario admin con campusId = NULL es administrador GLOBAL
+// ============================================================
+
+model Campus {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  semesters           Semester[]
+  cycles              Cycle[]
+  subjects            Subject[]
+  academicGroups      AcademicGroup[]
+  teachingAssignments TeachingAssignment[]
+
+  @@map("campus")
+}
+
+// ============================================================
 // USER
 // Representa cualquier persona en el sistema (admin, teacher, student)
 // Login oficial: username + passwordHash
@@ -64,6 +88,7 @@ model User {
   phone             String?
   email             String?
   roleId            String
+  campusId          String?
   avatar            String   @default("")
   active            Boolean  @default(true)
   blocked           Boolean  @default(false)
@@ -74,6 +99,7 @@ model User {
 
   // Relations
   role                Role                  @relation(fields: [roleId], references: [id])
+  campus              Campus?               @relation(fields: [campusId], references: [id])
   managedGroups         AcademicGroup[]       @relation("AcademicGroupManager")
   teachingAssignments   TeachingAssignment[]  @relation("TeachingAssignmentTeacher")
   enrollments           Enrollment[]          @relation("EnrollmentStudent")
@@ -88,6 +114,8 @@ model User {
   auditLogs             AuditLog[]              @relation("UserAuditLogs")
 
   @@index([roleId])
+  @@index([campusId])
+  @@index([campusId, roleId])
   @@map("users")
 }
 
@@ -173,18 +201,22 @@ model Session {
 
 model Semester {
   id        String   @id @default(cuid())
-  code      String   @unique
+  code      String
   name      String
   active    Boolean  @default(false)
   startDate DateTime
   endDate   DateTime
+  campusId  String?
   createdAt DateTime @default(now())
 
   academicGroups    AcademicGroup[]
   enrollments       Enrollment[]
   activeForSettings InstitutionSettings? @relation("ActiveSemester")
+  campus            Campus?             @relation(fields: [campusId], references: [id])
 
+  @@unique([campusId, code])
   @@index([active])
+  @@index([campusId])
   @@map("semesters")
 }
 
@@ -196,17 +228,22 @@ model Semester {
 
 model Cycle {
   id           String   @id @default(cuid())
-  code         String   @unique
+  code         String
   name         String
   description  String   @default("")
-  order        Int      @unique
+  order        Int
   usesSubjects Boolean  @default(true)
   active       Boolean  @default(true)
+  campusId     String?
 
   academicGroups       AcademicGroup[]
   teachingAssignments  TeachingAssignment[]
+  campus               Campus? @relation(fields: [campusId], references: [id])
 
+  @@unique([campusId, code])
+  @@unique([campusId, order])
   @@index([active])
+  @@index([campusId])
   @@map("cycles")
 }
 
@@ -218,15 +255,19 @@ model Cycle {
 model Subject {
   id     String  @id @default(cuid())
   name   String
-  code   String  @unique
+  code   String
   color  String  @default("#0F6A3B")
   icon   String  @default("book-open")
   active Boolean @default(true)
+  campusId String?
 
   teachingAssignments TeachingAssignment[]
   classes             Class[]
+  campus              Campus? @relation(fields: [campusId], references: [id])
 
+  @@unique([campusId, code])
   @@index([active])
+  @@index([campusId])
   @@map("subjects")
 }
 
@@ -245,11 +286,13 @@ model AcademicGroup {
   nameInternal      String
   nameForStudents   String
   active            Boolean  @default(true)
+  campusId          String?
   createdAt         DateTime @default(now())
 
   semester         Semester            @relation(fields: [semesterId], references: [id])
   cycle            Cycle               @relation(fields: [cycleId], references: [id])
   managerTeacher   User?               @relation("AcademicGroupManager", fields: [managerTeacherId], references: [id])
+  campus           Campus?             @relation(fields: [campusId], references: [id])
   teachingAssignments TeachingAssignment[]
   enrollments      Enrollment[]
   classes          Class[]
@@ -257,6 +300,7 @@ model AcademicGroup {
   @@index([semesterId])
   @@index([cycleId])
   @@index([managerTeacherId])
+  @@index([campusId])
   @@map("academic_groups")
 }
 
@@ -273,12 +317,14 @@ model TeachingAssignment {
   subjectId        String?
   academicGroupId  String?
   active           Boolean  @default(true)
+  campusId         String?
   createdAt        DateTime @default(now())
 
   teacher         User            @relation("TeachingAssignmentTeacher", fields: [teacherId], references: [id])
   cycle           Cycle           @relation(fields: [cycleId], references: [id])
   subject         Subject?        @relation(fields: [subjectId], references: [id])
   academicGroup   AcademicGroup?  @relation(fields: [academicGroupId], references: [id])
+  campus          Campus?         @relation(fields: [campusId], references: [id])
   classes         Class[]
 
   @@unique([teacherId, cycleId, subjectId, academicGroupId])
@@ -286,6 +332,7 @@ model TeachingAssignment {
   @@index([cycleId])
   @@index([subjectId])
   @@index([academicGroupId])
+  @@index([campusId])
   @@map("teaching_assignments")
 }
 
