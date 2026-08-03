@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import { assertPostWritable } from "@/lib/class-access-guard";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,17 +34,9 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.post.findFirst({
-      where: {
-        id,
-        ...(auth.scope!.campusId
-          ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
-          : {}),
-      },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
-    }
+    // Autorización backend: teacher modifica publicaciones de sus clases o propias.
+    const guard = await assertPostWritable(auth.scope!, id);
+    if (guard.error) return guard.error;
 
     const data: Record<string, unknown> = {};
     if (body.content !== undefined) data.content = body.content;
@@ -68,17 +61,9 @@ export async function DELETE(
     const auth = await requireCampusScope(request, ["admin", "teacher"]);
     if (auth.error) return auth.error;
     const { id } = await params;
-    const existing = await prisma.post.findFirst({
-      where: {
-        id,
-        ...(auth.scope!.campusId
-          ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
-          : {}),
-      },
-    });
-    if (!existing) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
-    }
+    // Autorización backend: teacher elimina publicaciones de sus clases o propias.
+    const guard = await assertPostWritable(auth.scope!, id);
+    if (guard.error) return guard.error;
 
     await prisma.post.delete({ where: { id } });
     return NextResponse.json({ success: true });

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
 import { prisma } from "@/lib/prisma";
+import { NotificationType } from "@/generated/prisma/client";
+
+const NOTIFICATION_TYPES = new Set(Object.values(NotificationType));
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,6 +48,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     if (!body.userId || !body.type || !body.title || !body.message) {
       return NextResponse.json({ error: "userId, type, title, and message are required" }, { status: 400 });
+    }
+
+    // Validación del tipo ANTES de llegar a Prisma: nunca 500 por enum inválido.
+    if (typeof body.type !== "string" || !NOTIFICATION_TYPES.has(body.type)) {
+      const valid = Array.from(NOTIFICATION_TYPES).join(", ");
+      return NextResponse.json(
+        { error: `Tipo de notificación inválido. Valores permitidos: ${valid}` },
+        { status: 400 }
+      );
     }
 
     const targetUser = await prisma.user.findUnique({ where: { id: body.userId } });

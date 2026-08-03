@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import { assertClassActor } from "@/lib/class-access-guard";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -37,24 +38,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "classId and content are required" }, { status: 400 });
     }
 
-    const cls = await prisma.class.findFirst({
-      where: {
-        id: body.classId,
-        ...(auth.scope!.campusId
-          ? { academicGroup: { campusId: auth.scope!.campusId } }
-          : {}),
-      },
-    });
-    if (!cls) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    // Autorización backend: teacher solo publica en clases que enseña; estudiante
+    // solo en el academicGroup donde está matriculado. Nunca confiar en ids del cliente.
+    const guard = await assertClassActor(auth.scope!, body.classId, { students: true });
+    if (guard.error) return guard.error;
+    if (!guard.cls) return NextResponse.json({ error: "Class not found" }, { status: 404 });
 
-    const authorId = body.authorId || auth.user!.id;
-    const user = await prisma.user.findFirst({
-      where: {
-        id: authorId,
-        ...(auth.scope!.campusId ? { campusId: auth.scope!.campusId } : {}),
-      },
-    });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // Estudiantes y profesores publican SIEMPRE como ellos mismos.
+    // Admin global o de sede: solo puede atribuir la publicación a otro usuario
+    // cuando ese usuario pertenece a la sede seleccionada.
+    let authorId: string;
+    if (auth.scope!.role === "admin") {
+      authorId = body.authorId || auth.user!.id;
+      if (authorId !== auth.user!.id) {
+        const user = await prisma.user.findFirst({
+          where: {
+            id: authorId,
+            ...(auth.scope!.campusId ? { campusId: auth.scope!.campusId } : {}),
+          },
+        });
+        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+    } else {
+      authorId = auth.user!.id;
+    }
 
     const post = await prisma.post.create({
       data: {

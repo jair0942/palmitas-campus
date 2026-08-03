@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import { assertAssignmentWritable } from "@/lib/class-access-guard";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,15 +31,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.assignment.findFirst({
-      where: {
-        id,
-        ...(auth.scope!.campusId
-          ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
-          : {}),
-      },
-    });
-    if (!existing) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+    // Autorización backend: teacher solo modifica tareas de clases que enseña.
+    const guard = await assertAssignmentWritable(auth.scope!, id);
+    if (guard.error) return guard.error;
+    const existing = guard.assignment!;
 
     if (body.points !== undefined && Number(body.points) < 0) {
       return NextResponse.json({ error: "Points cannot be negative" }, { status: 400 });
@@ -74,15 +70,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const auth = await requireCampusScope(request, ["admin", "teacher"]);
     if (auth.error) return auth.error;
     const { id } = await params;
-    const existing = await prisma.assignment.findFirst({
-      where: {
-        id,
-        ...(auth.scope!.campusId
-          ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
-          : {}),
-      },
-    });
-    if (!existing) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
+
+    // Autorización backend: teacher solo elimina tareas de clases que enseña.
+    const guard = await assertAssignmentWritable(auth.scope!, id);
+    if (guard.error) return guard.error;
 
     const subCount = await prisma.submission.count({ where: { assignmentId: id } });
     if (subCount > 0) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import { assertClassActor } from "@/lib/class-access-guard";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -37,15 +38,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "classId and title are required" }, { status: 400 });
     }
 
-    const cls = await prisma.class.findFirst({
-      where: {
-        id: body.classId,
-        ...(auth.scope!.campusId
-          ? { academicGroup: { campusId: auth.scope!.campusId } }
-          : {}),
-      },
-    });
-    if (!cls) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    // Autorización backend: teacher solo puede crear tareas en clases que enseña
+    // (teacherId resuelto contra TeachingAssignment, nunca de la petición).
+    const guard = await assertClassActor(auth.scope!, body.classId);
+    if (guard.error) return guard.error;
 
     const points = Number(body.points);
     if (points < 0) {
