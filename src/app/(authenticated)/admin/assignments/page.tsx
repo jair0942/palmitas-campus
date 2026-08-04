@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { BarChart3, History, School, UserCheck, Users, X } from "lucide-react";
 import type { Enrollment } from "@/types";
@@ -19,13 +18,13 @@ import {
 } from "@/components/ui/select";
 import EmptyState from "@/components/shared/empty-state";
 import PageHeader from "@/components/shared/page-header";
+import RouteGuard from "@/components/auth/route-guard";
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function AdminAssignmentsPage() {
-  const router = useRouter();
   const {
     user,
     semesters,
@@ -42,11 +41,6 @@ export default function AdminAssignmentsPage() {
   const [selectedSemesterId, setSelectedSemesterId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [academicGroupId, setAcademicGroupId] = useState("");
-
-  if (!user || user.role !== "admin") {
-    router.push("/dashboard");
-    return null;
-  }
 
   const activeSemester = getActiveSemester();
   const students = getStudents();
@@ -87,7 +81,8 @@ export default function AdminAssignmentsPage() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
+    <RouteGuard allow={["admin"]}>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
       <PageHeader icon={UserCheck} title="Matriculas Academicas" description="Matricula estudiantes por semestre y grupo academico sin modificar el historial" />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
@@ -220,5 +215,6 @@ export default function AdminAssignmentsPage() {
         </div>
       </div>
     </motion.div>
+    </RouteGuard>
   );
 }

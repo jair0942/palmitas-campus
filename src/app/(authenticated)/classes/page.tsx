@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { BookOpen, Users } from "lucide-react";
 import PageHeader from "@/components/shared/page-header";
 import EmptyState from "@/components/shared/empty-state";
+import RouteGuard from "@/components/auth/route-guard";
 import { CLASS_COLORS } from "@/components/shared/gradient-card";
 import { getUserDisplayName } from "@/lib/domain";
 
@@ -27,15 +28,11 @@ export default function ClassesPage() {
   const router = useRouter();
   const { user, getClassesForUser, getTeacherForClass, getStudentsInClass } = useStore();
 
-  if (!user || user.role === "admin") {
-    router.push("/dashboard");
-    return null;
-  }
-
-  const isStudent = user.role === "student";
+  const isStudent = user?.role === "student";
   const classes = getClassesForUser();
 
   return (
+    <RouteGuard allow={["student", "teacher"]}>
     <div className="mx-auto max-w-7xl space-y-8 p-6">
       <PageHeader
         icon={BookOpen}
@@ -93,5 +90,6 @@ export default function ClassesPage() {
         </motion.div>
       )}
     </div>
+    </RouteGuard>
   );
 }

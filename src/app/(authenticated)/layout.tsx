@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useStore } from "@/hooks/use-store";
 import AppSidebar from "@/components/layout/app-sidebar";
 import AppHeader from "@/components/layout/app-header";
+import PageSkeleton from "@/components/shared/page-skeleton";
+import MustChangePassword from "@/features/auth/must-change-password";
 import { motion } from "framer-motion";
 
 export default function AuthenticatedLayout({
@@ -14,7 +16,7 @@ export default function AuthenticatedLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user } = useStore();
+  const { user, isHydrated, logout } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -32,12 +34,25 @@ export default function AuthenticatedLayout({
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    if (!user) {
-      router.push("/");
+    if (isHydrated && !user) {
+      router.replace("/");
     }
-  }, [user, router]);
+  }, [isHydrated, user, router]);
 
-  if (!user) return null;
+  if (!isHydrated || !user) {
+    return <PageSkeleton />;
+  }
+
+  if (user.mustChangePassword) {
+    return (
+      <MustChangePassword
+        onLogout={async () => {
+          await logout();
+          router.replace("/");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

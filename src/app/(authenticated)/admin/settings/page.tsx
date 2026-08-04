@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, KeyRound, Lock, Mail, Pencil, Plus, School, Settings, Trash2, User } from "lucide-react";
+import { BarChart3, BookOpen, Lock, Mail, Pencil, Plus, School, Settings, Trash2, User } from "lucide-react";
 import { useStore } from "@/hooks/use-store";
 import { getUserDisplayName } from "@/lib/domain";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +18,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import PageHeader from "@/components/shared/page-header";
+import RouteGuard from "@/components/auth/route-guard";
+import ChangePasswordForm from "@/features/auth/change-password-form";
 
 export default function AdminSettingsPage() {
-  const router = useRouter();
   const {
     user,
     semesters,
@@ -41,18 +40,13 @@ export default function AdminSettingsPage() {
     deleteSubject,
   } = useStore();
 
-  const [passwordForm, setPasswordForm] = useState({ current: "", newPass: "", confirm: "" });
-  const [semesterForm, setSemesterForm] = useState({ code: "", name: "", startDate: "", endDate: "" });
-  const [editingSemId, setEditingSemId] = useState<string | null>(null);
+  const [semesterForm, setSemesterForm] = useState({ code: "", name: "", startDate: "", endDate: "" });  const [editingSemId, setEditingSemId] = useState<string | null>(null);
   const [cycleForm, setCycleForm] = useState({ code: "", name: "", description: "", order: 0, usesSubjects: true });
   const [editingCycleId, setEditingCycleId] = useState<string | null>(null);
   const [subjectForm, setSubjectForm] = useState({ name: "", code: "", color: "#0F6A3B", icon: "book-open" });
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
 
-  if (!user || user.role !== "admin") {
-    router.push("/dashboard");
-    return null;
-  }
+  if (!user) return null;
 
   function resetSemesterForm() {
     setEditingSemId(null);
@@ -67,16 +61,6 @@ export default function AdminSettingsPage() {
   function resetSubjectForm() {
     setEditingSubjectId(null);
     setSubjectForm({ name: "", code: "", color: "#0F6A3B", icon: "book-open" });
-  }
-
-  function handleChangePassword() {
-    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) return;
-    if (passwordForm.newPass !== passwordForm.confirm) {
-      alert("Las contrasenas no coinciden.");
-      return;
-    }
-    alert("Contrasena actualizada correctamente.");
-    setPasswordForm({ current: "", newPass: "", confirm: "" });
   }
 
   async function handleSaveSemester() {
@@ -138,7 +122,8 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-6">
+    <RouteGuard allow={["admin"]}>
+      <div className="mx-auto max-w-4xl space-y-8 p-6">
       <PageHeader icon={Settings} title="Configuracion" description="Administra semestres, ciclos, materias y cuenta institucional" />
 
       <motion.div id="semestres" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -332,17 +317,12 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Card className="shadow-sm">
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Lock className="size-4 text-primary" />Cambiar Contrasena</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <Input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} placeholder="Contrasena actual" />
-          <Separator />
-          <Input type="password" value={passwordForm.newPass} onChange={(e) => setPasswordForm({ ...passwordForm, newPass: e.target.value })} placeholder="Nueva contrasena" />
-          <Input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} placeholder="Confirmar nueva contrasena" />
-          <Button onClick={handleChangePassword} disabled={!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm} className="gap-1.5">
-            <KeyRound className="size-3.5" /> Actualizar contrasena
-          </Button>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Lock className="size-4 text-primary" />Cambiar Contraseña</CardTitle></CardHeader>
+        <CardContent>
+          <ChangePasswordForm />
         </CardContent>
       </Card>
     </div>
+    </RouteGuard>
   );
 }

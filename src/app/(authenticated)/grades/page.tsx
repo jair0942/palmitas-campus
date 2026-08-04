@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import { useStore } from "@/hooks/use-store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +27,7 @@ import {
 import PageHeader from "@/components/shared/page-header"
 import EmptyState from "@/components/shared/empty-state"
 import SectionTitle from "@/components/shared/section-title"
+import RouteGuard from "@/components/auth/route-guard"
 import { Award, TrendingUp, BookOpen, BarChart3, CheckCircle2, Clock, XCircle, Pencil, Send, Star } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -65,7 +65,6 @@ function getStatusLabel(sub: { grade: unknown } | undefined): { label: string; c
 }
 
 export default function GradesPage() {
-  const router = useRouter()
   const { user, assignments, grades, getClassesForUser, getClassById, getStudentsInClass, getUserName, gradeSubmission, getStudentSubmission } = useStore()
 
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
@@ -83,11 +82,6 @@ export default function GradesPage() {
       .filter((a) => a.classId === selectedClassId)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }, [selectedClassId, assignments])
-
-  if (!user || user.role === "admin") {
-    router.push("/dashboard")
-    return null
-  }
 
   const isStudent = user?.role === "student"
   const isTeacher = user?.role === "teacher"
@@ -135,7 +129,8 @@ export default function GradesPage() {
     })()
 
     return (
-      <div className="mx-auto max-w-7xl space-y-8 p-6">
+      <RouteGuard allow={["student", "teacher"]}>
+        <div className="mx-auto max-w-7xl space-y-8 p-6">
         <PageHeader icon={Award} title="Mis Calificaciones" />
 
         {overallAverage !== null && (
@@ -246,12 +241,14 @@ export default function GradesPage() {
             </motion.div>
           ))
         )}
-      </div>
+    </div>
+      </RouteGuard>
     )
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-6">
+    <RouteGuard allow={["student", "teacher"]}>
+      <div className="mx-auto max-w-7xl space-y-8 p-6">
       <PageHeader icon={Award} title="Calificaciones" description="Gestiona las calificaciones de tus estudiantes" />
 
       <div className="flex flex-wrap gap-2">
@@ -391,5 +388,6 @@ export default function GradesPage() {
         </motion.div>
       )}
     </div>
+    </RouteGuard>
   )
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useStore } from "@/hooks/use-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import PageHeader from "@/components/shared/page-header";
 import EmptyState from "@/components/shared/empty-state";
+import RouteGuard from "@/components/auth/route-guard";
 import {
   BarChart3, School, GraduationCap, Users, TrendingUp, Award,
   FileText, CheckCircle2, Clock, Filter,
@@ -43,7 +43,6 @@ function CountUp({ value, suffix = "" }: { value: number; suffix?: string }) {
 }
 
 export default function AdminReportsPage() {
-  const router = useRouter();
   const { user, classes, assignments, grades, teachingAssignments, getTeachers, getStudents, getStudentsInClass, getTeacherForClass, getUserName } = useStore();
 
   const teachers = getTeachers();
@@ -60,8 +59,7 @@ export default function AdminReportsPage() {
   const [filterClass, setFilterClass] = useState("");
   const [filterTeacher, setFilterTeacher] = useState("");
 
-  const filteredAssignments = (() => {
-    let result = assignments;
+  const filteredAssignments = (() => {    let result = assignments;
     if (filterClass) result = result.filter((a) => a.classId === filterClass);
     if (filterTeacher) {
       const teacherClassIds = classes
@@ -105,10 +103,7 @@ export default function AdminReportsPage() {
     });
   })();
 
-  if (!user || user.role !== "admin") {
-    router.push("/dashboard");
-    return null;
-  }
+  if (!user) return null;
 
   const classesWithCounts = classes
     .map((c) => ({ ...c, studentCount: getStudentsInClass(c.id).length }))
@@ -126,7 +121,8 @@ export default function AdminReportsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <RouteGuard allow={["admin"]}>
+      <div className="mx-auto max-w-7xl space-y-6 p-6">
       <PageHeader
         icon={BarChart3}
         title="Reportes"
@@ -352,5 +348,6 @@ export default function AdminReportsPage() {
         </Card>
       </motion.div>
     </div>
+    </RouteGuard>
   );
 }

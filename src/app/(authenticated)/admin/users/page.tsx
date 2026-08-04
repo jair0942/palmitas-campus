@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import EmptyState from "@/components/shared/empty-state";
 import PageHeader from "@/components/shared/page-header";
+import RouteGuard from "@/components/auth/route-guard";
 
 const emptyForm = {
   username: "",
@@ -41,11 +42,6 @@ export default function AdminUsersPage() {
   const { user, getTeachers, getStudents, addUser, updateUser, deleteUser } = useStore();
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState(emptyForm);
-
-  if (!user || user.role !== "admin") {
-    router.push("/dashboard");
-    return null;
-  }
 
   const teachers = getTeachers();
   const students = getStudents();
@@ -108,7 +104,8 @@ export default function AdminUsersPage() {
   );
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
+    <RouteGuard allow={["admin"]}>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
       <PageHeader
         icon={tab === "teachers" ? GraduationCap : Users}
         title={`Administrar ${roleLabel}`}
@@ -176,5 +173,6 @@ export default function AdminUsersPage() {
         </div>
       )}
     </motion.div>
+    </RouteGuard>
   );
 }

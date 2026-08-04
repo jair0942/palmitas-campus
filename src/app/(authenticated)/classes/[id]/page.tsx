@@ -33,6 +33,7 @@ import PostCard from "@/features/posts/post-card";
 import AssignmentCard from "@/features/assignments/assignment-card";
 import AssignmentDetail from "@/features/assignments/assignment-detail";
 import EmptyState from "@/components/shared/empty-state";
+import RouteGuard from "@/components/auth/route-guard";
 import { GRADIENT_COLORS } from "@/components/shared/gradient-card";
 import { getUserDisplayName, getUserInitials } from "@/lib/domain";
 import {
@@ -215,11 +216,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     return `${hours} hora${hours !== 1 ? "s" : ""}`;
   }, [newAssignmentDueDate, newAssignmentDueTime]);
 
-  if (!user || user.role === "admin") {
-    router.push("/dashboard");
-    return null;
-  }
-
   const cls = getClassById(id);
   const teacher = cls ? getTeacherForClass(cls.id) : undefined;
   const students = cls ? getStudentsInClass(cls.id) : [];
@@ -286,41 +282,35 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     setNewAssignmentPublishTime(`${n.getHours().toString().padStart(2, "0")}:${n.getMinutes().toString().padStart(2, "0")}`);
   }
 
-  if (!cls) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <EmptyState
-          icon={BookOpen}
-          title="Clase no encontrada"
-          description="La clase que buscas no existe o ha sido eliminada"
-          action={<Button variant="outline" onClick={() => router.push("/classes")}>Volver a clases</Button>}
-        />
-      </div>
-    );
-  }
-
-  if (selectedAssignment) {
-    return (
-      <div className="mx-auto max-w-4xl p-6">
-        <AssignmentDetail
-          assignmentId={selectedAssignment}
-          onBack={() => setSelectedAssignment(null)}
-        />
-      </div>
-    );
-  }
-
-  const allGrades = assignments.map((a) => ({
+  const allGrades = cls ? assignments.map((a) => ({
     assignment: a,
     grades: students.map((s) => {
       const grade = getGradesForStudentInClass(cls.id, s.id);
       const ag = grade?.assignments.find((g) => g.assignmentId === a.id);
       return { student: s, score: ag?.score ?? null, maxScore: ag?.maxScore ?? a.points };
     }),
-  }));
+  })) : [];
 
   return (
-    <AnimatePresence mode="wait">
+    <RouteGuard allow={["student", "teacher"]}>
+      {!cls ? (
+        <div className="flex items-center justify-center py-20">
+          <EmptyState
+            icon={BookOpen}
+            title="Clase no encontrada"
+            description="La clase que buscas no existe o ha sido eliminada"
+            action={<Button variant="outline" onClick={() => router.push("/classes")}>Volver a clases</Button>}
+          />
+        </div>
+      ) : selectedAssignment ? (
+        <div className="mx-auto max-w-4xl p-6">
+          <AssignmentDetail
+            assignmentId={selectedAssignment}
+            onBack={() => setSelectedAssignment(null)}
+          />
+        </div>
+      ) : (
+      <AnimatePresence mode="wait">
       <motion.div
         key={id}
         initial={{ opacity: 0, y: 20 }}
@@ -765,6 +755,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </Tabs>
       </motion.div>
-    </AnimatePresence>
+      </AnimatePresence>
+      )}
+    </RouteGuard>
   );
 }

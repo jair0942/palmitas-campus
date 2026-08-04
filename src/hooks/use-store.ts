@@ -77,6 +77,9 @@ let globalState: AppState = {
 
 let listeners: Array<() => void> = [];
 
+let isLoading = true;
+let isHydrated = false;
+
 function notify() {
   for (const listener of listeners) listener();
 }
@@ -243,6 +246,8 @@ export function useStore() {
   }, []);
 
   const loadAll = useCallback(async () => {
+    isLoading = true;
+    notify();
     try {
       const [meRes, usersRes, semestersRes, cyclesRes, subjectsRes, tasRes, settingsRes, groupsRes, enrollmentsRes, classesRes, postsRes, assignmentsRes, fileAssetsRes, submissionsRes, campusesRes] = await Promise.all([
         fetchApi("/api/auth/me"),
@@ -333,7 +338,11 @@ export function useStore() {
         }
       } catch {
         // API unavailable
+        isHydrated = true;
       }
+      isLoading = false;
+      isHydrated = true;
+      notify();
     }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<User | null> => {
@@ -370,6 +379,33 @@ export function useStore() {
     } catch {}
     globalState = { ...globalState, user: null };
     notify();
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await fetchApi("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        return { ok: false, error: data.error || "No se pudo cambiar la contraseña" };
+      }
+      try {
+        const meRes = await fetchApi("/api/auth/me");
+        if (meRes.ok) {
+          const meData = (await meRes.json()) as { user?: Record<string, unknown> };
+          if (meData.user) {
+            globalState = { ...globalState, user: mapApiUserToStore(meData.user) };
+          }
+        }
+      } catch {}
+      notify();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Error de conexión. Intenta de nuevo." };
+    }
   }, []);
 
   const getClassesForUser = useCallback((): Class[] => {
@@ -1393,6 +1429,8 @@ export function useStore() {
     users: globalState.users,
     campuses: globalState.campuses,
     activeCampus,
+    isLoading,
+    isHydrated,
     semesters: globalState.semesters,
     cycles: globalState.cycles,
     subjects: globalState.subjects,
@@ -1409,6 +1447,7 @@ export function useStore() {
     auditLogs: globalState.auditLogs,
     login,
     logout,
+    changePassword,
     setActiveCampus,
     getUserCampusName,
     getClassesForUser,

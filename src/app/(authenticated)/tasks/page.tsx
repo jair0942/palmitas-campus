@@ -9,6 +9,7 @@ import { CalendarClock, FileText, BookOpen } from "lucide-react"
 import { motion } from "framer-motion"
 import PageHeader from "@/components/shared/page-header"
 import EmptyState from "@/components/shared/empty-state"
+import RouteGuard from "@/components/auth/route-guard"
 import StatusBadge, { getSubmissionStatus as getAssignmentStatus } from "@/components/shared/status-badge"
 import { cn } from "@/lib/utils"
 
@@ -89,12 +90,10 @@ export default function TasksPage() {
     show: { opacity: 1, y: 0 },
   }
 
-  if (!user || user.role === "admin") {
-    router.push("/dashboard")
-    return null
-  }
+  if (!user) return null
 
   return (
+    <RouteGuard allow={["student", "teacher"]}>
     <div className="mx-auto max-w-7xl space-y-8 p-6">
       <PageHeader
         icon={CalendarClock}
@@ -316,5 +315,6 @@ export default function TasksPage() {
         </div>
       )}
     </div>
+    </RouteGuard>
   )
 }

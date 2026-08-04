@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { BookOpen, BookText, Pencil, Plus, Trash2, UserCheck, Users } from "lucide-react";
 import { useStore } from "@/hooks/use-store";
@@ -29,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import EmptyState from "@/components/shared/empty-state";
 import PageHeader from "@/components/shared/page-header";
+import RouteGuard from "@/components/auth/route-guard";
 
 const gradientColors = [
   "linear-gradient(135deg, #0F6A3B, #16A34A)",
@@ -49,7 +49,6 @@ const emptyForm = {
 };
 
 export default function AdminClassesPage() {
-  const router = useRouter();
   const {
     user,
     classes,
@@ -89,11 +88,6 @@ export default function AdminClassesPage() {
   const previewName = selectedCycleIsCycle2
     ? "Ciclo 2"
     : classForm.name || [selectedSubject?.name, selectedCycle?.name].filter(Boolean).join(" - ");
-
-  if (!user || user.role !== "admin") {
-    router.push("/dashboard");
-    return null;
-  }
 
   function initForm(cls?: typeof classes[number]) {
     if (!cls) {
@@ -222,7 +216,8 @@ export default function AdminClassesPage() {
   );
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
+    <RouteGuard allow={["admin"]}>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6 p-6">
       <PageHeader
         icon={BookOpen}
         title="Administrar Clases"
@@ -303,10 +298,11 @@ export default function AdminClassesPage() {
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
+          );
+        })}
+      </div>
       )}
     </motion.div>
+    </RouteGuard>
   );
 }

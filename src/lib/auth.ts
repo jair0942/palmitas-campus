@@ -76,8 +76,6 @@ export async function invalidateSession(token: string) {
 }
 
 export async function loginUser(username: string, password: string, ip?: string, userAgent?: string) {
-  console.log("[LOGIN] Attempt for username:", username);
-
   const user = await prisma.user.findUnique({
     where: { username },
     include: {
@@ -93,23 +91,17 @@ export async function loginUser(username: string, password: string, ip?: string,
   });
 
   if (!user) {
-    console.log("[LOGIN] FAIL: user not found for username:", username);
     return null;
   }
-  console.log("[LOGIN] User found:", user.id, "active:", user.active, "blocked:", user.blocked);
-  console.log("[LOGIN] passwordHash length:", user.passwordHash?.length);
 
   if (!user.active) {
-    console.log("[LOGIN] FAIL: user is not active");
     return null;
   }
   if (user.blocked) {
-    console.log("[LOGIN] FAIL: user is blocked");
     return null;
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  console.log("[LOGIN] bcrypt.compare result:", valid);
   if (!valid) return null;
 
   const token = await createSession(user.id, ip, userAgent);
