@@ -34,6 +34,7 @@ import AssignmentCard from "@/features/assignments/assignment-card";
 import AssignmentDetail from "@/features/assignments/assignment-detail";
 import EmptyState from "@/components/shared/empty-state";
 import RouteGuard from "@/components/auth/route-guard";
+import { classAveragePercent, gradedScoresByAssignment } from "@/lib/grading";
 import { GRADIENT_COLORS } from "@/components/shared/gradient-card";
 import { getUserDisplayName, getUserInitials } from "@/lib/domain";
 import {
@@ -178,7 +179,6 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
     getPostsForClass,
     getAssignmentsForClass,
     getUserName,
-    getGradesForStudentInClass,
     addPost,
     addAssignment,
   } = useStore();
@@ -285,9 +285,10 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const allGrades = cls ? assignments.map((a) => ({
     assignment: a,
     grades: students.map((s) => {
-      const grade = getGradesForStudentInClass(cls.id, s.id);
-      const ag = grade?.assignments.find((g) => g.assignmentId === a.id);
-      return { student: s, score: ag?.score ?? null, maxScore: ag?.maxScore ?? a.points };
+      const graded = a.submissions
+        .filter((sub) => sub.studentId === s.id && sub.grade)
+        .sort((x, y) => new Date(y.submittedAt).getTime() - new Date(x.submittedAt).getTime());
+      return { student: s, score: graded[0]?.grade?.score ?? null, maxScore: a.points };
     }),
   })) : [];
 
@@ -719,17 +720,18 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                     </thead>
                     <tbody>
                       {students.map((student) => {
-                        const studentGrade = getGradesForStudentInClass(cls.id, student.id);
+                        const studentRows = gradedScoresByAssignment(assignments, cls.id, student.id);
+                        const studentAvg = classAveragePercent(assignments, cls.id, student.id);
                         return (
                           <tr key={student.id} className="border-b last:border-b-0 transition-colors hover:bg-muted/30">
                             <td className="px-4 py-3 font-medium text-foreground">{getUserDisplayName(student)}</td>
                             {allGrades.map(({ assignment }) => {
-                              const grade = studentGrade?.assignments.find((g) => g.assignmentId === assignment.id);
+                              const row = studentRows.get(assignment.id);
                               return (
                                 <td key={assignment.id} className="px-3 py-3 text-center">
-                                  {grade?.score != null ? (
-                                    <span className={cn("font-semibold", grade.score >= (grade.maxScore * 0.7) ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-                                      {grade.score}
+                                  {row?.score != null ? (
+                                    <span className={cn("font-semibold", row.score >= (row.maxScore * 0.7) ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                                      {row.score}
                                     </span>
                                   ) : (
                                     <span className="text-muted-foreground">&mdash;</span>
@@ -738,9 +740,9 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
                               );
                             })}
                             <td className="px-3 py-3 text-center font-semibold text-foreground">
-                              {studentGrade?.average != null ? (
-                                <span className={cn(studentGrade.average >= 70 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-                                  {studentGrade.average.toFixed(1)}
+                              {studentAvg != null ? (
+                                <span className={cn(studentAvg >= 70 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                                  {studentAvg}
                                 </span>
                               ) : "\u2014"}
                             </td>

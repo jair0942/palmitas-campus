@@ -32,6 +32,7 @@ import { Award, TrendingUp, BookOpen, BarChart3, CheckCircle2, Clock, XCircle, P
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { getUserDisplayName } from "@/lib/domain"
+import { classAveragePercent, gradedScoresByAssignment, meanPercent } from "@/lib/grading"
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("es-ES", {
@@ -65,7 +66,7 @@ function getStatusLabel(sub: { grade: unknown } | undefined): { label: string; c
 }
 
 export default function GradesPage() {
-  const { user, assignments, grades, getClassesForUser, getClassById, getStudentsInClass, getUserName, gradeSubmission, getStudentSubmission } = useStore()
+  const { user, assignments, getClassesForUser, getClassById, getStudentsInClass, getUserName, gradeSubmission, getStudentSubmission } = useStore()
 
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [editGradeSubId, setEditGradeSubId] = useState<string | null>(null)
@@ -115,18 +116,11 @@ export default function GradesPage() {
         const pct = sub?.grade ? getPercentage(sub.grade.score, a.points) : null
         return { assignment: a, submission: sub, status, pct }
       })
-      const scored = gradesData.filter((g) => g.submission?.grade)
-      const avg = scored.length > 0
-        ? Math.round(scored.reduce((sum, g) => sum + g.submission!.grade!.score, 0) / scored.length)
-        : null
+      const avg = classAveragePercent(assignments, cls.id, user.id)
       return { class: cls, grades: gradesData, average: avg }
     }).filter((c) => c.grades.length > 0)
 
-    const overallAverage = (() => {
-      const allAverages = classesWithData.map((c) => c.average).filter((a): a is number => a !== null)
-      if (allAverages.length === 0) return null
-      return Math.round(allAverages.reduce((s, a) => s + a, 0) / allAverages.length)
-    })()
+    const overallAverage = meanPercent(classesWithData.map((c) => c.average))
 
     return (
       <RouteGuard allow={["student", "teacher"]}>
@@ -301,16 +295,17 @@ export default function GradesPage() {
                     </TableRow>
                   ) : (
                     studentsInClass.map((student) => {
-                      const studentGrade = grades.find((g) => g.studentId === student.id && g.classId === selectedClassId)
+                      const studentRows = gradedScoresByAssignment(assignments, selectedClassId, student.id)
+                      const studentAverage = classAveragePercent(assignments, selectedClassId, student.id)
                       return (
                         <TableRow key={student.id} className="transition-colors hover:bg-muted/30">
                           <TableCell className="font-medium">{getUserDisplayName(student)}</TableCell>
                           {classAssignments.map((a) => {
                             const sub = a.submissions.find((s) => s.studentId === student.id)
-                            const ag = studentGrade?.assignments.find((g) => g.assignmentId === a.id)
-                            const score = ag?.score ?? sub?.grade?.score ?? null
+                            const row = studentRows.get(a.id)
+                            const score = row?.score ?? null
                             const pct = getPercentage(score, a.points)
-                            const isGraded = sub?.grade != null
+                            const isGraded = score != null
                             return (
                               <TableCell key={a.id} className="text-center">
                                 {sub ? (
@@ -369,9 +364,9 @@ export default function GradesPage() {
                             )
                           })}
                           <TableCell className="text-center">
-                            {studentGrade?.average !== null && studentGrade?.average !== undefined ? (
-                              <span className={cn("font-semibold", getGradeColor(studentGrade.average))}>
-                                {studentGrade.average}%
+                            {studentAverage !== null ? (
+                              <span className={cn("font-semibold", getGradeColor(studentAverage))}>
+                                {studentAverage}%
                               </span>
                             ) : (
                               <span className="text-muted-foreground">&mdash;</span>

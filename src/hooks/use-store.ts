@@ -24,6 +24,7 @@ import type {
   User,
 } from "@/types";
 import { getUserDisplayName } from "@/lib/domain";
+import { weightedAveragePercent } from "@/lib/grading";
 
 interface AppState {
   user: User | null;
@@ -1166,12 +1167,14 @@ export function useStore() {
           const nextAssignments = [...grade.assignments];
           if (assignmentGradeIndex >= 0) nextAssignments[assignmentGradeIndex] = { ...nextAssignments[assignmentGradeIndex], score, maxScore };
           else nextAssignments.push({ assignmentId, score, maxScore });
-          const scored = nextAssignments.filter((item) => item.score !== null);
-          const average = scored.length ? Math.round(scored.reduce((sum, item) => sum + item.score!, 0) / scored.length) : null;
+          const scoredRows = nextAssignments
+            .filter((item) => item.score !== null)
+            .map((item) => ({ score: item.score as number, maxScore: item.maxScore }));
+          const average = weightedAveragePercent(scoredRows);
           return { ...grade, assignments: nextAssignments, average };
         });
       } else {
-        grades = [...globalState.grades, { id: `grade-${Date.now()}`, classId, studentId, assignments: [{ assignmentId, score, maxScore }], average: score }];
+        grades = [...globalState.grades, { id: `grade-${Date.now()}`, classId, studentId, assignments: [{ assignmentId, score, maxScore }], average: weightedAveragePercent([{ score, maxScore }]) }];
       }
       notifyUsers([studentId], "grade", "Tarea calificada", `Tu tarea "${assignment.title}" fue calificada con ${score}/${maxScore}`, classId, assignmentId);
       globalState = { ...globalState, assignments, grades };

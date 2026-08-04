@@ -28,6 +28,7 @@ import {
   FileText, CheckCircle2, Clock, Filter,
 } from "lucide-react";
 import { getUserDisplayName } from "@/lib/domain";
+import { classAveragePercent, meanPercent } from "@/lib/grading";
 
 function CountUp({ value, suffix = "" }: { value: number; suffix?: string }) {
   return (
@@ -43,7 +44,7 @@ function CountUp({ value, suffix = "" }: { value: number; suffix?: string }) {
 }
 
 export default function AdminReportsPage() {
-  const { user, classes, assignments, grades, teachingAssignments, getTeachers, getStudents, getStudentsInClass, getTeacherForClass, getUserName } = useStore();
+  const { user, classes, assignments, teachingAssignments, getTeachers, getStudents, getStudentsInClass, getTeacherForClass, getUserName } = useStore();
 
   const teachers = getTeachers();
   const students = getStudents();
@@ -55,6 +56,21 @@ export default function AdminReportsPage() {
   const totalGraded = assignments.reduce((sum, a) =>
     sum + a.submissions.filter((s) => s.grade).length, 0
   );
+
+  const overallAverage = (() => {
+    const seen = new Set<string>();
+    const averages: (number | null)[] = [];
+    for (const a of assignments) {
+      for (const sub of a.submissions) {
+        if (!sub.grade) continue;
+        const key = `${a.classId}::${sub.studentId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        averages.push(classAveragePercent(assignments, a.classId, sub.studentId));
+      }
+    }
+    return meanPercent(averages);
+  })();
 
   const [filterClass, setFilterClass] = useState("");
   const [filterTeacher, setFilterTeacher] = useState("");
@@ -248,8 +264,8 @@ export default function AdminReportsPage() {
               <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
                 <span className="text-sm text-foreground">Promedio general</span>
                 <Badge variant="secondary" className="bg-[#0F6A3B]/10 text-[#0F6A3B]">
-                  {totalGraded > 0
-                    ? `${Math.round(grades.reduce((s, g) => s + (g.average ?? 0), 0) / Math.max(1, grades.filter((g) => g.average !== null).length))}%`
+                  {totalGraded > 0 && overallAverage !== null
+                    ? `${overallAverage}%`
                     : "—"}
                 </Badge>
               </div>
