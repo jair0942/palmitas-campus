@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import { assertClassActor } from "@/lib/class-access-guard";
+import { getStudentEnrollmentGroupIds } from "@/lib/student-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +19,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       include: { teachingAssignment: true, academicGroup: true, subject: true },
     });
     if (!cls) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    if (auth.scope!.role === "student") {
+      const groups = await getStudentEnrollmentGroupIds(auth.scope!.userId);
+      if (!groups.includes(cls.academicGroupId)) {
+        return NextResponse.json({ error: "Class not found" }, { status: 404 });
+      }
+    }
     return NextResponse.json(cls);
   } catch {
     return NextResponse.json({ error: "Failed to read class" }, { status: 500 });
@@ -39,6 +47,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       },
     });
     if (!existing) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+
+    // Autorización backend: teacher solo modifica clases que enseña.
+    const guard = await assertClassActor(auth.scope!, id);
+    if (guard.error) return guard.error;
 
     const campusId = existing.academicGroupId
       ? (await prisma.academicGroup.findUnique({ where: { id: existing.academicGroupId } }))?.campusId
@@ -93,6 +105,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       },
     });
     if (!existing) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+
+    // Autorización backend: teacher solo elimina clases que enseña.
+    const guard = await assertClassActor(auth.scope!, id);
+    if (guard.error) return guard.error;
 
     await prisma.class.delete({ where: { id } });
     return NextResponse.json({ success: true });

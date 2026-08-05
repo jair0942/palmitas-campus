@@ -32,6 +32,7 @@ import { Award, TrendingUp, BookOpen, BarChart3, CheckCircle2, Clock, XCircle, P
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { getUserDisplayName } from "@/lib/domain"
+import { isAssignmentPublished } from "@/lib/domain"
 import { classAveragePercent, gradedScoresByAssignment, meanPercent } from "@/lib/grading"
 
 function formatDate(dateStr: string) {
@@ -109,6 +110,7 @@ export default function GradesPage() {
     const classesWithData = userClasses.map((cls) => {
       const clsAssignments = assignments
         .filter((a) => a.classId === cls.id)
+        .filter((a) => isAssignmentPublished(a.publishAt))
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       const gradesData = clsAssignments.map((a) => {
         const sub = a.submissions.find((s) => s.studentId === user.id)

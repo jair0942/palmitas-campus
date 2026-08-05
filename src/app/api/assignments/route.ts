@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
 import { assertClassActor } from "@/lib/class-access-guard";
+import { getStudentEnrollmentGroupIds } from "@/lib/student-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -18,9 +19,20 @@ export async function GET(request: NextRequest) {
       where.classId = classId;
     }
 
+    if (auth.scope!.role === "student") {
+      const groups = await getStudentEnrollmentGroupIds(auth.scope!.userId);
+      if (groups.length === 0) return NextResponse.json([]);
+      const classIds = await prisma.class.findMany({
+        where: { academicGroupId: { in: groups } },
+        select: { id: true },
+      });
+      where.classId = { in: classIds.map((c) => c.id) };
+      where.publishAt = { lte: new Date() };
+    }
+
     const assignments = await prisma.assignment.findMany({
       where,
-      include: { attachments: true },
+      include: { attachments: true, class: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(assignments);

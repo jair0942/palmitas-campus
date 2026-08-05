@@ -36,7 +36,7 @@ import EmptyState from "@/components/shared/empty-state";
 import RouteGuard from "@/components/auth/route-guard";
 import { classAveragePercent, gradedScoresByAssignment } from "@/lib/grading";
 import { GRADIENT_COLORS } from "@/components/shared/gradient-card";
-import { getUserDisplayName, getUserInitials } from "@/lib/domain";
+import { getUserDisplayName, getUserInitials, isAssignmentPublished } from "@/lib/domain";
 import {
   Plus, UserCheck, FileText, BarChart3, Upload, Send, ArrowLeft,
   CalendarClock, MessageCircle, Paperclip, BookOpen,
@@ -220,9 +220,11 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const teacher = cls ? getTeacherForClass(cls.id) : undefined;
   const students = cls ? getStudentsInClass(cls.id) : [];
   const posts = cls ? getPostsForClass(cls.id) : [];
-  const assignments = cls ? getAssignmentsForClass(cls.id) : [];
   const isTeacher = user?.role === "teacher";
   const isStudent = user?.role === "student";
+  const assignments = cls
+    ? getAssignmentsForClass(cls.id).filter((a) => (isStudent ? isAssignmentPublished(a.publishAt) : true))
+    : [];
 
   const colorIndex = cls ? parseInt(cls.id.replace("class-", ""), 10) - 1 : 0;
 

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const submissions = await prisma.submission.findMany({
       where,
-      include: { versions: { orderBy: { versionNumber: "desc" } }, correctionRequests: true, grade: true, student: true },
+      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: true } }, correctionRequests: true, grade: true, student: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(submissions);
@@ -60,6 +60,10 @@ export async function POST(request: NextRequest) {
     });
     if (!assignment) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
 
+    if (auth.scope!.role === "student" && assignment.publishAt && new Date(assignment.publishAt) > new Date()) {
+      return NextResponse.json({ error: "Assignment not published yet" }, { status: 403 });
+    }
+
     const student = await prisma.user.findFirst({
       where: {
         id: body.studentId,
@@ -89,7 +93,7 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-      include: { versions: { orderBy: { versionNumber: "desc" } }, correctionRequests: true, grade: true, student: true },
+      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: true } }, correctionRequests: true, grade: true, student: true },
     });
 
     return NextResponse.json(submission, { status: 201 });

@@ -23,7 +23,7 @@ import type {
   TeachingAssignment,
   User,
 } from "@/types";
-import { getUserDisplayName } from "@/lib/domain";
+import { getUserDisplayName, isAssignmentPublished } from "@/lib/domain";
 import { weightedAveragePercent } from "@/lib/grading";
 
 interface AppState {
@@ -448,14 +448,17 @@ export function useStore() {
     const classes = globalState.classes.filter((cls) => cls.academicGroupId === enrollment.academicGroupId);
     return globalState.assignments
       .filter((assignment) => classes.some((cls) => cls.id === assignment.classId))
+      .filter((assignment) => isAssignmentPublished(assignment.publishAt))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, []);
 
   const getUpcomingAssignments = useCallback((limit = 5): Assignment[] => {
     const now = new Date();
+    const user = globalState.user;
     const classes = getClassesForUser();
     return globalState.assignments
       .filter((assignment) => classes.some((cls) => cls.id === assignment.classId))
+      .filter((assignment) => user?.role === "student" ? isAssignmentPublished(assignment.publishAt) : true)
       .filter((assignment) => new Date(assignment.dueDate) > now)
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
       .slice(0, limit);

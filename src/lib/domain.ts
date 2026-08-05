@@ -33,3 +33,8 @@ export function getClassDisplayName(
   if (isCycle2(cycle)) return getAcademicGroupStudentName(group);
   return cls.name || subject?.name || getAcademicGroupStudentName(group);
 }
+
+export function isAssignmentPublished(publishAt?: string | null): boolean {
+  if (!publishAt) return true;
+  return new Date(publishAt).getTime() <= Date.now();
+}

@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope, writeCampusError } from "@/lib/campus-scope";
+import { getStudentEnrollmentGroupIds } from "@/lib/student-scope";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireCampusScope(request);
     if (auth.error) return auth.error;
-    const classes = await prisma.class.findMany({
-      where: auth.scope!.campusId
-        ? { academicGroup: { campusId: auth.scope!.campusId } }
-        : undefined,
-      include: { teachingAssignment: true, academicGroup: true, subject: true },
-      orderBy: { createdAt: "desc" },
-    });
+
+    let classes;
+    if (auth.scope!.role === "student") {
+      const groups = await getStudentEnrollmentGroupIds(auth.scope!.userId);
+      if (groups.length === 0) return NextResponse.json([]);
+      classes = await prisma.class.findMany({
+        where: { academicGroupId: { in: groups } },
+        include: { teachingAssignment: true, academicGroup: true, subject: true },
+        orderBy: { createdAt: "desc" },
+      });
+    } else {
+      classes = await prisma.class.findMany({
+        where: auth.scope!.campusId
+          ? { academicGroup: { campusId: auth.scope!.campusId } }
+          : undefined,
+        include: { teachingAssignment: true, academicGroup: true, subject: true },
+        orderBy: { createdAt: "desc" },
+      });
+    }
     return NextResponse.json(classes);
   } catch {
     return NextResponse.json({ error: "Failed to read classes" }, { status: 500 });

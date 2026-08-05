@@ -3,7 +3,6 @@ import { requireAuth } from "@/lib/require-auth";
 import { prisma } from "@/lib/prisma";
 import { StorageProvider } from "../../../generated/prisma/client";
 import storage from "@/lib/storage";
-import { validateSession } from "@/lib/auth";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import path from "path";
@@ -56,6 +55,10 @@ function formatSize(bytes: number): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req);
+    if (auth.error) return auth.error;
+    const uploadedById = auth.user?.id;
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
@@ -92,10 +95,6 @@ export async function POST(req: NextRequest) {
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
       return NextResponse.json({ error: `File type '${file.type}' is not allowed` }, { status: 400 });
     }
-
-    const token = req.cookies.get("session_token")?.value;
-    const session = token ? await validateSession(token) : null;
-    const uploadedById = session?.user?.id;
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
