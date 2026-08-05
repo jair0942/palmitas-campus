@@ -2,6 +2,7 @@
 
 import type { Post } from "@/types";
 import { useStore } from "@/hooks/use-store";
+import { getAttachmentDownloadUrl } from "@/lib/attachments";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageCircle, Paperclip } from "lucide-react";
 import { motion } from "framer-motion";
@@ -59,7 +60,7 @@ export default function PostCard({ post, className }: PostCardProps) {
                 {post.attachments.map((att, i) => (
                   <a
                     key={i}
-                    href={att.url}
+                    href={getAttachmentDownloadUrl(att)}
                     download
                     className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                   >

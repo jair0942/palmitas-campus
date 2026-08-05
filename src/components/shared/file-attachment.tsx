@@ -2,6 +2,7 @@
 
 import { Download, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getAttachmentDownloadUrl } from "@/lib/attachments";
 import type { Attachment } from "@/types";
 
 interface FileAttachmentProps {
@@ -17,7 +18,7 @@ export default function FileAttachment({
 }: FileAttachmentProps) {
   return (
     <a
-      href={attachment.url}
+      href={getAttachmentDownloadUrl(attachment)}
       download
       className={cn(
         "inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",

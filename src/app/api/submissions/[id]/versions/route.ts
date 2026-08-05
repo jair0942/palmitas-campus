@@ -68,7 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         versionNumber: nextVersionNumber,
         content: body.content,
         attachments: body.attachments?.length
-          ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url })) }
+          ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string; fileAssetId?: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url, fileAssetId: a.fileAssetId || null })) }
           : undefined,
       },
       include: { attachments: true },

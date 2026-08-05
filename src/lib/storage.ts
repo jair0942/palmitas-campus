@@ -1,31 +1,70 @@
-import { writeFile, mkdir, unlink } from "fs/promises";
-import path from "path";
+import { getSupabaseAdmin, storageBucket } from "./supabase";
 
 export interface StorageProvider {
-  save(filename: string, buffer: Buffer): Promise<string>;
-  delete(filename: string): Promise<void>;
+  ensureBucket(): Promise<void>;
+  save(key: string, buffer: Buffer, mimeType: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  createSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
 }
 
-class LocalStorageProvider implements StorageProvider {
-  private baseDir: string;
+class SupabaseStorageProvider implements StorageProvider {
+  private bucketReady: Promise<void> | null = null;
 
-  constructor() {
-    this.baseDir = path.join(process.cwd(), "public", "uploads");
+  ensureBucket(): Promise<void> {
+    if (!this.bucketReady) {
+      this.bucketReady = this.ensureBucketImpl().catch((err) => {
+        this.bucketReady = null;
+        throw err;
+      });
+    }
+    return this.bucketReady;
   }
 
-  async save(filename: string, buffer: Buffer): Promise<string> {
-    await mkdir(this.baseDir, { recursive: true });
-    await writeFile(path.join(this.baseDir, filename), buffer);
-    return `/uploads/${filename}`;
+  private async ensureBucketImpl(): Promise<void> {
+    const supabase = getSupabaseAdmin();
+    const { error: getError } = await supabase.storage.getBucket(storageBucket);
+    if (!getError) return;
+    const { error: createError } = await supabase.storage.createBucket(storageBucket, {
+      public: false,
+    });
+    if (createError) {
+      throw new Error(`No se pudo crear el bucket privado '${storageBucket}': ${createError.message}`);
+    }
   }
 
-  async delete(filename: string): Promise<void> {
-    try {
-      await unlink(path.join(this.baseDir, filename));
-    } catch {}
+  async save(key: string, buffer: Buffer, mimeType: string): Promise<void> {
+    await this.ensureBucket();
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.storage.from(storageBucket).upload(key, buffer, {
+      contentType: mimeType,
+      upsert: false,
+      cacheControl: "3600",
+    });
+    if (error) {
+      throw new Error(`No se pudo subir el objeto: ${error.message}`);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.storage.from(storageBucket).remove([key]);
+    if (error && error.message && !error.message.toLowerCase().includes("not found")) {
+      throw new Error(`No se pudo eliminar el objeto: ${error.message}`);
+    }
+  }
+
+  async createSignedUrl(key: string, expiresInSeconds = 120): Promise<string> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from(storageBucket)
+      .createSignedUrl(key, expiresInSeconds);
+    if (error || !data?.signedUrl) {
+      throw new Error(`No se pudo generar URL firmada: ${error?.message ?? "sin datos"}`);
+    }
+    return data.signedUrl;
   }
 }
 
-const storage: StorageProvider = new LocalStorageProvider();
+const storage: StorageProvider = new SupabaseStorageProvider();
 
 export default storage;

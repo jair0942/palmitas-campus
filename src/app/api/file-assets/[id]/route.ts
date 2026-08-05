@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCampusScope } from "@/lib/campus-scope";
+import storage from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,5 +50,43 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json(asset);
   } catch {
     return NextResponse.json({ error: "Failed to update file asset" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const auth = await requireCampusScope(request, ["admin", "teacher"]);
+    if (auth.error) return auth.error;
+
+    if (auth.scope!.isGlobalAdmin && !auth.scope!.campusId) {
+      return NextResponse.json(
+        { error: "Debe seleccionar una sede para eliminar el archivo" },
+        { status: 400 }
+      );
+    }
+
+    const { id } = await params;
+    const asset = await prisma.fileAsset.findFirst({
+      where: {
+        id,
+        ...(auth.scope!.campusId ? { uploader: { campusId: auth.scope!.campusId } } : {}),
+      },
+    });
+    if (!asset) return NextResponse.json({ error: "File asset not found" }, { status: 404 });
+
+    const refs = await prisma.attachment.count({ where: { fileAssetId: id } });
+    if (refs > 0) {
+      return NextResponse.json(
+        { error: "File asset is referenced by attachments and cannot be deleted" },
+        { status: 409 }
+      );
+    }
+
+    await storage.delete(asset.storedName);
+    await prisma.fileAsset.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to delete file asset" }, { status: 500 });
   }
 }

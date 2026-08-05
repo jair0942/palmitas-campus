@@ -53,11 +53,39 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+async function resolveEffectiveCampus(req: NextRequest, userId: string, role: string): Promise<{ campusId: string | null; error: NextResponse | null }> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { campusId: true } });
+  let campusId: string | null = user?.campusId ?? null;
+
+  if (!campusId && role === "admin") {
+    const header = req.headers.get("x-campus-id")?.trim();
+    if (header) {
+      const campus = await prisma.campus.findUnique({ where: { id: header } });
+      if (campus) campusId = campus.id;
+    }
+  }
+
+  if (!campusId) {
+    return {
+      campusId: null,
+      error: NextResponse.json(
+        { error: "Debe seleccionar una sede para subir el archivo" },
+        { status: 400 }
+      ),
+    };
+  }
+  return { campusId, error: null };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req);
     if (auth.error) return auth.error;
-    const uploadedById = auth.user?.id;
+    const user = auth.user;
+    const uploadedById = user.id;
+
+    const { campusId, error: campusError } = await resolveEffectiveCampus(req, uploadedById, user.role);
+    if (campusError) return campusError;
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -104,26 +132,31 @@ export async function POST(req: NextRequest) {
     }
 
     const checksum = createHash("sha256").update(buffer).digest("hex");
-    const storedName = `${uuidv4()}${ext}`;
-    const url = await storage.save(storedName, buffer);
+    const objectKey = `${campusId}/${uploadedById}/${uuidv4()}${ext}`;
+
+    await storage.save(objectKey, buffer, file.type);
 
     const asset = await prisma.fileAsset.create({
       data: {
-        uploadedById: uploadedById as string | undefined,
+        uploadedById,
         originalName,
-        storedName,
-        url,
+        storedName: objectKey,
+        url: "",
         mimeType: file.type,
         extension: ext.replace(".", ""),
         sizeBytes: file.size,
         checksum,
-        storageProvider: StorageProvider.LOCAL,
+        storageProvider: StorageProvider.EXTERNAL,
       },
     });
+
+    const downloadUrl = `/api/file-assets/${asset.id}/download`;
+    await prisma.fileAsset.update({ where: { id: asset.id }, data: { url: downloadUrl } });
 
     return NextResponse.json(
       {
         ...asset,
+        url: downloadUrl,
         name: asset.originalName,
         size: formatSize(asset.sizeBytes),
         type: asset.mimeType,

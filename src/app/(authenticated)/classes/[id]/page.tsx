@@ -37,6 +37,7 @@ import RouteGuard from "@/components/auth/route-guard";
 import { classAveragePercent, gradedScoresByAssignment } from "@/lib/grading";
 import { GRADIENT_COLORS } from "@/components/shared/gradient-card";
 import { getUserDisplayName, getUserInitials, isAssignmentPublished } from "@/lib/domain";
+import { getAttachmentDownloadUrl } from "@/lib/attachments";
 import {
   Plus, UserCheck, FileText, BarChart3, Upload, Send, ArrowLeft,
   CalendarClock, MessageCircle, Paperclip, BookOpen,
@@ -108,7 +109,7 @@ function PostWithComments({ post }: { post: { id: string; authorId: string; cont
             {post.attachments.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {post.attachments.map((att, i) => (
-                  <a key={i} href={att.url} download className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
+                  <a key={i} href={getAttachmentDownloadUrl(att)} download className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
                     <Paperclip className="size-3" />
                     <span className="truncate max-w-[100px]">{att.name}</span>
                   </a>
