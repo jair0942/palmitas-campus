@@ -2,11 +2,12 @@
 
 import { useStore } from "@/hooks/use-store"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { User, Shield, Mail, Calendar } from "lucide-react"
+import { User, Shield, Mail, Lock } from "lucide-react"
 import { motion } from "framer-motion"
 import PageHeader from "@/components/shared/page-header"
+import ChangePasswordForm from "@/features/auth/change-password-form"
 import { getUserDisplayName, getUserInitials } from "@/lib/domain"
 
 const roleLabels: Record<string, string> = {
@@ -72,6 +73,26 @@ export default function ProfilePage() {
                 <p className="mt-0.5 text-sm font-semibold text-foreground">—</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <Card className="border-transparent shadow-lg shadow-black/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lock className="size-4 text-primary" />
+              Seguridad
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Establece una contraseña personal para tu cuenta.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ChangePasswordForm />
           </CardContent>
         </Card>
       </motion.div>

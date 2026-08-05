@@ -4,24 +4,48 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/require-auth";
 
 const SALT_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
 
 export async function POST(request: NextRequest) {
   try {
+    // El userId se obtiene EXCLUSIVAMENTE de la sesión autenticada.
     const auth = await requireAuth(request);
     if (auth.error) return auth.error;
 
-    const { currentPassword, newPassword } = await request.json();
+    const { currentPassword, newPassword, confirmPassword } = await request.json();
 
-    if (!currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword || !confirmPassword) {
       return NextResponse.json(
-        { error: "currentPassword and newPassword are required" },
+        { error: "currentPassword, newPassword y confirmPassword son obligatorios" },
         { status: 400 }
       );
     }
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
       return NextResponse.json(
-        { error: "La nueva contraseña debe tener al menos 8 caracteres" },
+        { error: `La nueva contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres` },
+        { status: 400 }
+      );
+    }
+
+    if (newPassword.length > MAX_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `La nueva contraseña no puede superar los ${MAX_PASSWORD_LENGTH} caracteres` },
+        { status: 400 }
+      );
+    }
+
+    if (newPassword !== confirmPassword) {
+      return NextResponse.json(
+        { error: "Las contraseñas nuevas no coinciden" },
+        { status: 400 }
+      );
+    }
+
+    if (currentPassword === newPassword) {
+      return NextResponse.json(
+        { error: "La nueva contraseña debe ser diferente de la actual" },
         { status: 400 }
       );
     }

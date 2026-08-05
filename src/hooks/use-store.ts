@@ -382,12 +382,12 @@ export function useStore() {
     notify();
   }, []);
 
-  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> => {
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string, confirmPassword: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const res = await fetchApi("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
