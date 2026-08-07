@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
           : {}),
       },
-      include: { attachments: true },
+      include: { attachments: { include: { fileAsset: true } } },
     });
     if (!assignment) return NextResponse.json({ error: "Assignment not found" }, { status: 404 });
     return NextResponse.json(assignment);
@@ -56,7 +56,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ...(body.dueDate !== undefined ? { dueDate: new Date(body.dueDate) } : {}),
         ...(body.publishAt !== undefined ? { publishAt: new Date(body.publishAt) } : {}),
       },
-      include: { attachments: true },
+      include: { attachments: { include: { fileAsset: true } } },
     });
 
     return NextResponse.json(assignment);

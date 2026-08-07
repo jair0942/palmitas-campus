@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           ? { class: { academicGroup: { campusId: auth.scope!.campusId } } }
           : {}),
       },
-      include: { author: true, comments: { include: { author: true } }, attachments: true },
+      include: { author: true, comments: { include: { author: true } }, attachments: { include: { fileAsset: true } } },
     });
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
     return NextResponse.json(post);
@@ -44,7 +44,7 @@ export async function PATCH(
     const post = await prisma.post.update({
       where: { id },
       data,
-      include: { author: true, comments: { include: { author: true } }, attachments: true },
+      include: { author: true, comments: { include: { author: true } }, attachments: { include: { fileAsset: true } } },
     });
 
     return NextResponse.json(post);

@@ -19,6 +19,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  HardDrive,
 } from "lucide-react";
 import { useStore } from "@/hooks/use-store";
 import { getUserDisplayName, getUserInitials } from "@/lib/domain";
@@ -49,6 +50,7 @@ const adminNavItems: NavItem[] = [
   { label: "Clases", icon: BookOpen, href: "/admin/classes" },
   { label: "Matriculas", icon: UserCheck, href: "/admin/assignments" },
   { label: "Reportes", icon: BarChart3, href: "/admin/reports" },
+  { label: "Almacenamiento", icon: HardDrive, href: "/admin/storage" },
   { label: "Perfil", icon: User, href: "/profile" },
   { label: "Configuración", icon: Settings, href: "/admin/settings" },
 ];

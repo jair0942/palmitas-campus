@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
     const assignments = await prisma.assignment.findMany({
       where,
-      include: { attachments: true, class: true },
+      include: { attachments: { include: { fileAsset: true } }, class: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(assignments);
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
           ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string; fileAssetId?: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url, fileAssetId: a.fileAssetId || null })) }
           : undefined,
       },
-      include: { attachments: true },
+      include: { attachments: { include: { fileAsset: true } } },
     });
 
     return NextResponse.json(assignment, { status: 201 });

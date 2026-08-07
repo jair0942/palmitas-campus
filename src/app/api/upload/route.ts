@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/require-auth";
 import { prisma } from "@/lib/prisma";
 import { StorageProvider } from "../../../generated/prisma/client";
 import storage from "@/lib/storage";
+import { getRetentionDays, computeExpiresAt } from "@/lib/retention";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import path from "path";
@@ -136,6 +137,9 @@ export async function POST(req: NextRequest) {
 
     await storage.save(objectKey, buffer, file.type);
 
+    const retentionDays = await getRetentionDays(campusId);
+    const expiresAt = computeExpiresAt(new Date(), retentionDays);
+
     const asset = await prisma.fileAsset.create({
       data: {
         uploadedById,
@@ -147,6 +151,7 @@ export async function POST(req: NextRequest) {
         sizeBytes: file.size,
         checksum,
         storageProvider: StorageProvider.EXTERNAL,
+        expiresAt,
       },
     });
 

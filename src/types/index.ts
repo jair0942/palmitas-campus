@@ -112,6 +112,15 @@ export interface Attachment {
   type: string;
   url: string;
   fileAssetId?: string;
+  createdAt?: string;
+  fileAsset?: {
+    id: string;
+    originalName: string;
+    sizeBytes: number;
+    createdAt: string;
+    expiresAt: string | null;
+    protectedFromCleanup: boolean;
+  } | null;
 }
 
 export interface FileAsset {
@@ -125,6 +134,8 @@ export interface FileAsset {
   mimeType: string;
   extension: string;
   sizeBytes: number;
+  expiresAt?: string | null;
+  protectedFromCleanup?: boolean;
   createdAt: string;
 }
 

@@ -40,12 +40,35 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const data: Record<string, unknown> = {};
     if (body.originalName !== undefined) data.originalName = body.originalName;
     if (body.url !== undefined) data.url = body.url;
+    if (body.protectedFromCleanup !== undefined) {
+      if (auth.scope!.role !== "admin") {
+        return NextResponse.json(
+          { error: "Solo un administrador puede conservar un archivo" },
+          { status: 403 }
+        );
+      }
+      data.protectedFromCleanup = Boolean(body.protectedFromCleanup);
+    }
 
     const asset = await prisma.fileAsset.update({
       where: { id },
       data,
       include: { uploader: true },
     });
+
+    if (data.protectedFromCleanup !== undefined) {
+      await prisma.auditLog.create({
+        data: {
+          userId: auth.scope!.userId,
+          action: data.protectedFromCleanup ? "PROTECT_FILE_ASSET" : "UNPROTECT_FILE_ASSET",
+          module: "storage",
+          tableName: "file_assets",
+          recordId: id,
+          result: "success",
+          metadata: { campusId: asset.uploader?.campusId ?? null },
+        },
+      });
+    }
 
     return NextResponse.json(asset);
   } catch {

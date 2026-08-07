@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const submission = await prisma.submission.findFirst({
       where: { id, ...submissionScopeFilter(auth.scope!.campusId) },
       include: {
-        versions: { orderBy: { versionNumber: "desc" }, include: { attachments: true } },
+        versions: { orderBy: { versionNumber: "desc" }, include: { attachments: { include: { fileAsset: true } } } },
         correctionRequests: { orderBy: { createdAt: "desc" } },
         grade: true,
         student: true,

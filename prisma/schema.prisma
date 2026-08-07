@@ -67,6 +67,7 @@ model Campus {
   subjects            Subject[]
   academicGroups      AcademicGroup[]
   teachingAssignments TeachingAssignment[]
+  retentionPolicy     RetentionPolicy?
 
   @@map("campus")
 }
@@ -468,24 +469,65 @@ model Attachment {
 // ============================================================
 
 model FileAsset {
-  id              String          @id @default(cuid())
-  uploadedById    String?
-  originalName    String
-  storedName      String
-  url             String
-  storageProvider StorageProvider @default(LOCAL)
-  checksum        String?
-  mimeType        String
-  extension       String
-  sizeBytes       Int
-  createdAt       DateTime        @default(now())
+  id                  String          @id @default(cuid())
+  uploadedById        String?
+  originalName        String
+  storedName          String
+  url                 String
+  storageProvider     StorageProvider @default(LOCAL)
+  checksum            String?
+  mimeType            String
+  extension           String
+  sizeBytes           Int
+  expiresAt           DateTime?
+  protectedFromCleanup Boolean        @default(false)
+  createdAt           DateTime        @default(now())
 
   uploader    User?               @relation("FileAssetUploader", fields: [uploadedById], references: [id])
   attachments Attachment[]
 
   @@index([uploadedById])
   @@index([storageProvider])
+  @@index([expiresAt, protectedFromCleanup])
   @@map("file_assets")
+}
+
+// ============================================================
+// RETENTION POLICY
+// Política de retención por sede. Una fila por campus.
+// Solo afecta a archivos NUEVOS (expiresAt se calcula al subir).
+// ============================================================
+
+model RetentionPolicy {
+  id            String   @id @default(cuid())
+  campusId      String   @unique
+  retentionDays Int      @default(90)
+  updatedBy     String?
+  updatedAt     DateTime @updatedAt
+
+  campus Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@map("retention_policies")
+}
+
+// ============================================================
+// CLEANUP RUN
+// Registro de cada ejecución del job de limpieza automática
+// ============================================================
+
+model CleanupRun {
+  id           String    @id @default(cuid())
+  campusId     String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  status       String    @default("running")
+  deletedFiles Int       @default(0)
+  bytesFreed   Int       @default(0)
+  errors       Json?
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("cleanup_runs")
 }
 
 // ============================================================

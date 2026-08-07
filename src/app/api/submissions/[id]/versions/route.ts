@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const versions = await prisma.submissionVersion.findMany({
       where: { submissionId: id },
-      include: { attachments: true },
+      include: { attachments: { include: { fileAsset: true } } },
       orderBy: { versionNumber: "desc" },
     });
     return NextResponse.json(versions);
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           ? { create: body.attachments.map((a: { name: string; size: string; type: string; url: string; fileAssetId?: string }) => ({ name: a.name, size: a.size, type: a.type, url: a.url, fileAssetId: a.fileAssetId || null })) }
           : undefined,
       },
-      include: { attachments: true },
+      include: { attachments: { include: { fileAsset: true } } },
     });
 
     return NextResponse.json(version, { status: 201 });

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const submissions = await prisma.submission.findMany({
       where,
-      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: true } }, correctionRequests: true, grade: true, student: true },
+      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: { include: { fileAsset: true } } } }, correctionRequests: true, grade: true, student: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(submissions);
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: true } }, correctionRequests: true, grade: true, student: true },
+      include: { versions: { orderBy: { versionNumber: "desc" }, include: { attachments: { include: { fileAsset: true } } } }, correctionRequests: true, grade: true, student: true },
     });
 
     return NextResponse.json(submission, { status: 201 });
